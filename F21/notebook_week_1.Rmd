@@ -1,0 +1,227 @@
+---
+title: "Week 1"
+author: "Benjamin Skov Kaas-Hansen"
+date: "2/1/2021"
+output: 
+  html_document: 
+    code_folding: show
+    df_print: paged
+    highlight: haddock
+    theme: paper
+    toc: yes
+    toc_depth: 2
+---
+
+## 0. Setup
+Load packages
+```{r setup}
+knitr::opts_chunk$set(fig.align = "center")
+
+for (p in c("plyr", "tidyverse", "forcats", "readr", "mice", "tidyr")) {
+	library(p, character.only = TRUE)
+}
+
+theme_set(theme_minimal())
+```
+
+Define helper functions (if you do the same (or almost the same9) thing more than twice, you should create a function for that specific task)
+```{r}
+summary_stats <- function(x) {
+	"
+	x: vector of continuous values without missing values 
+	"
+	tribble(
+		~ statistic, ~ value,
+		"mean", mean(x),
+		"std_dev", sd(x),
+		"median", median(x),
+		"p25", quantile(x, probs = 0.25),
+		"p75", quantile(x, probs = 0.75),
+		"min", min(x),
+		"max", max(x)
+	)
+}
+```
+
+## 1. Data wrangling
+`transmute` and `mutate` are similar, but the former retains only columns that are modified whereas the latter keeps all columns plus newly created ones. `glimpse()` appears in two stages of the chain so we can see how the data morph.
+
+```{r data_wrangling}
+df_full <- read_delim("http://staff.pubhealth.ku.dk/~sr/BasicStatistics/datasets/sundby.txt",
+					  delim = " ", na = ".") %>% 
+	glimpse() %>% 
+	transmute(weight = v75,
+			  height = v76 / 100, # cm => metres
+			  sex = factor(kon, levels = c(1, 2), labels = c("male", "female"))) %>% 
+	glimpse()
+```
+
+Get a few summary stats; we have `r nrow(df_full)` observations with `r ncol(df_full)` variables.
+```{r}
+summary(df_full)
+```
+
+### Pattern in missingness
+The rows are missingness pattern (0 = variable is missing). The left-most column is the number of patients with the respective missingness patters, the right-most column the number of variables missing in each pattern, the bottom-most row the number of participants with missing values for the respective variables.
+
+```{r}
+md.pattern(df_full, plot = FALSE)
+```
+
+### Create dataframe without missing values
+Not this should be based on careful consideration of the nature of the missingness. There are many ways to handle missingness other than simply throwing observation away, depending on the task at hand.
+
+```{r}
+df <- na.exclude(df_full)
+```
+
+## 2. Weights of men and women
+The weight distributions seem to differ although they do overlap quite a lot.
+
+### Numerical summary
+```{r}
+df %>% 
+	group_by(sex) %>% 
+	summarise(summary_stats(weight), .groups = "drop") %>% 
+	arrange(statistic, sex)
+```
+
+### Plotting
+
+The "naive" approach seems weird because `ggplot2` stacks histograms by default.
+```{r}
+ggplot(df, aes(x = weight)) +
+	geom_histogram(aes(fill = sex), binwidth = 5)
+```
+
+So we tell `ggplot2` to dodge (= "unstack") the bars
+```{r}
+ggplot(df, aes(x = weight)) +
+	geom_histogram(aes(fill = sex), binwidth = 5, position = "dodge")
+```
+
+It's definitely better, but it can be a bit tricky to compare distributions without the same number of observations because the modes won't be of equal height. Using `table` we can see that there are about 21% more women than men.
+```{r}
+table(df$sex) # many more females, so a crude histogram might be misleading
+```
+
+--so we want "normalised" histograms instead. `ggplot2` computed some values (which ones depends on the `geom`), and these can be called surrounding them by two periods (see e.g. `?geom_histogram`)
+```{r}
+ggplot(df, aes(x = weight)) +
+	geom_histogram(aes(fill = sex, y = ..ncount..), binwidth = 5, position = "dodge")
+```
+
+I think multiple histrograms together are ugly and prefer to plot the frequencies as lines instead (= frequency polygons in `ggplot2`; weird name, pretty plot). And I add some plot cosmetics to have a nice-looking and near publication-ready plot:
+```{r}
+ggplot(df, aes(x = weight, colour = sex, y = ..ncount..)) +
+	geom_freqpoly(binwidth = 5, size = 0.25) +
+	stat_bin(size = 0.5, binwidth = 5, geom = "point", position = "identity") +
+	labs(x = "Weight in kilograms", y = "No. participants as fraction of maximum count") +
+	scale_colour_manual(values = c(male = "#377eb8", female = "#e41a1c")) +
+	theme(axis.text.y = element_blank())
+```
+
+#### Alternatives
+Violin plots are richer than boxplots and can unearth patterns in the distribution than escape boxplots. Their appearance depends heavily on their settings so be careful. These plots are not "beautified".
+
+```{r}
+ggplot(df, aes(x = sex, y = weight, fill = sex)) +
+	geom_violin(size = 0.4) 
+
+ggplot(df, aes(x = sex, y = weight, fill = sex)) +
+	geom_boxplot(size = 0.4) 
+```
+
+## 3. Construct reference intervals
+
+### Using the Normality assumption
+```{r}
+df %>% 
+	group_by(sex) %>%
+	summarise(mean = mean(weight),
+			  std_dev = sd(weight),
+			  interval_factor = sqrt(1 + 1/n()) * qt(0.975, n() - 1),
+			  ci_lo_norm = mean - interval_factor * std_dev,
+			  ci_hi_norm = mean + interval_factor * std_dev,
+			  ci_lo_nonnorm = quantile(weight, 0.025),
+			  ci_hi_nonnorm = quantile(weight, 0.975))
+```
+
+## 5. Scatterplot of weight ~ height
+
+The simple scatterplot looks nice but is actually deceiving.
+```{r}
+ggplot(df, aes(x = weight, y = height, shape = sex, colour = sex)) +
+	geom_point()
+```
+
+If we make the points transparent, we see many points are plotted on top of each other (over-plotting) which means the first opaque scatterplot is "hiding" observations. The transparency helps:
+```{r}
+ggplot(df, aes(x = weight, y = height, shape = sex, colour = sex)) +
+	geom_point(alpha = 0.5)
+```
+
+But we can also try a heatmap-plot (note again the use of a computed value surrouned by two periods, here `..ncount..`)
+```{r}
+ggplot(df, aes(x = weight, y = height)) +
+	geom_hex(aes(alpha = ..ncount.., fill = sex), bins = 40) +
+	scale_alpha_continuous(range = c(0, 0.9)) 
+```
+
+Or a contour plot is perhaps less confusing than the heatmap plot because overlaying doesn't work sooo well out-of-the-box.
+```{r}
+ggplot(df, aes(x = weight, y = height, colour = sex)) +
+	geom_density2d(size = 0.25) 
+```
+
+## 6. BMI
+Dataframes are "immutable" so you need to overwrite with a mutated version of `df`.
+```{r}
+df <- df %>% 
+	mutate(bmi = weight / height^2)
+```
+
+The distribution seems about right: right-skewed, with some extreme values but mostly in the normal range. BMI doesn't seem to have a Normal distribution, however. 
+```{r}
+ggplot(df, aes(x = bmi)) +
+	geom_histogram(aes(y = ..density..), colour = "white", fill = "grey80", binwidth = 1) +
+	geom_density(aes(colour = "Density estimate of data")) +
+	stat_function(aes(colour = "Normal distribution"), fun = dnorm, args = list(mean = mean(df$bmi), sd = sd(df$bmi))) 
+```
+
+### Determine normal ranges for each sex with and without normality assumption
+```{r}
+df %>% 
+	group_by(sex) %>%
+	summarise(mean = mean(bmi),
+			  std_dev = sd(bmi),
+			  interval_factor = sqrt(1 + 1/n()) * qt(0.975, n() - 1),
+			  ci_lo_norm = mean - interval_factor * std_dev,
+			  ci_hi_norm = mean + interval_factor * std_dev,
+			  n_outside_ci_norm = sum(!between(bmi, ci_lo_norm, ci_hi_norm)),
+			  prop_outside_ci_norm = mean(!between(bmi, ci_lo_norm, ci_hi_norm)),
+			  ci_lo_nonnorm = quantile(bmi, 0.025),
+			  ci_hi_nonnorm = quantile(bmi, 0.975),
+			  n_outside_ci_nonnorm = sum(!between(bmi, ci_lo_nonnorm, ci_hi_nonnorm)),
+			  prop_outside_ci_nonnorm = mean(!between(bmi, ci_lo_nonnorm, ci_hi_nonnorm)))
+```
+
+## 7. Using log-BMI
+Better agreement between intervals based on normality assumption and empirical estimates. 
+```{r}
+df %>% 
+	mutate(log_bmi = log(bmi)) %>% 
+	group_by(sex) %>%
+	summarise(mean = mean(log_bmi),
+			  std_dev = sd(log_bmi),
+			  interval_factor = sqrt(1 + 1/n()) * qt(0.975, n() - 1),
+			  ci_lo_norm = exp(mean - interval_factor * std_dev),
+			  ci_hi_norm = exp(mean + interval_factor * std_dev),
+			  n_outside_ci_norm = sum(!between(bmi, ci_lo_norm, ci_hi_norm)),
+			  prop_outside_ci_norm = mean(!between(bmi, ci_lo_norm, ci_hi_norm)),
+			  ci_lo_nonnorm = exp(quantile(log_bmi, 0.025)),
+			  ci_hi_nonnorm = exp(quantile(log_bmi, 0.975)),
+			  n_outside_ci_nonnorm = sum(!between(bmi, ci_lo_nonnorm, ci_hi_nonnorm)),
+			  prop_outside_ci_nonnorm = mean(!between(bmi, ci_lo_nonnorm, ci_hi_nonnorm)))
+```
+
