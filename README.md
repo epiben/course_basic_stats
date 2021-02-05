@@ -3,7 +3,7 @@ This repo holds the materials I've made for the uCopenhagen PhD course, "Basic s
 
 ### E21 - R intermediate track
 
-| Week | Topic(s) | Exercise 1 | Exercise 2 |
+| Week | Topic(s) | Exercise 1 | Exercise 2 |
 |:-----|:--------:|:----------:|:----------:|
 |1 | Basic concepts in statistics | [ [Rmarkdown](F21/notebook_week_1__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_1__ex_1.html) \] | \[coming\] |
 
