@@ -369,7 +369,7 @@ ggplot(df, aes(x = sex, y = weight, fill = sex)) +
 
 ### 3. Construct reference intervals
 
-#### On the "cirka 2" factor
+#### On the "circa 2" factor
 Often, you can just use 2 or 1.96 (because the $t$ distribution gets closer to the Normal as N becomes large). This is just to show the relationship between the "circa 2"-factor and the number of observations. `tibble`s are a modern version of dataframes (they arrived with `dplyr`) and offer three nice features: columns are created "on-the-fly" so you can use values from previous columns to create a new one (this is not possible with `data.frame()`), they print in a nice way (unlike dataframes; this becomes more important for larger dataframes/tibbles), they don't convert strings to factors automatically (the `read_*()` functions from `readr` have the same feature unlike the `read.*()` in base R). As we can see, already for around 100 observations, the 1.96 approximation is quite good.
 ```{r}
 tibble(n_obs = 2:200, # n_obs = 1 is meaningless as a single observation can't have a distribution
@@ -382,7 +382,7 @@ tibble(n_obs = 2:200, # n_obs = 1 is meaningless as a single observation can't h
 		scale_y_continuous(breaks = c(round(qt(0.975, Inf), 2), 5, 10, 15, 20))
 ```
 
-### Using the Normality assumption
+#### Using the Normality assumption
 ```{r}
 df %>% 
 	filter(!is.na(weight)) %>% # keep the rows where weight is *not* missing
@@ -471,7 +471,7 @@ ggplot(df_bmi, aes(x = bmi, colour = sex)) +
 	geom_freqpoly(binwidth = 1)
 ```
 
-### Determine normal ranges for each sex with and without normality assumption
+#### Determine normal ranges for each sex with and without normality assumption
 Note that use of `sum` and `mean` of TRUE/FALSE vectors (whether BMI is between the lower and higer bounds of the reference intervals.)
 
 ```{r}
