@@ -1,7 +1,7 @@
 ---
-title: "Week 1"
+title: "Basic statistics for health research - week 1, ex. 1"
 author: "Benjamin Skov Kaas-Hansen"
-date: "2/1/2021"
+date: "5/1/2021"
 output: 
   html_document: 
     code_folding: show
@@ -19,16 +19,15 @@ Load packages
 # Set default alignment of figures
 knitr::opts_chunk$set(fig.align = "center")
 
-# Load packages
-## Data manipulation
+# Data manipulation
 library(dplyr)
 library(tidyr)
 library(readr)
 
-## Data inspection
+# Data inspection
 library(mice)
 
-## Data visualiation
+# Data visualiation
 library(ggplot2)
 library(qqplotr) # for QQ-plots, a ggplot2 extension
 library(patchwork) # for patching together plots, very powerful and simple to use (highly recommended)
@@ -398,7 +397,7 @@ df %>%
 	pivot_around_sex() # this is just cosmetics so the results fit better
 ```
 
-## 5. Scatterplot of weight ~ height
+### 5. Scatterplot of weight ~ height
 The simple scatterplot looks nice but is actually deceiving.
 ```{r}
 ggplot(df, aes(x = weight, y = height, shape = sex, colour = sex)) +
@@ -492,7 +491,7 @@ df_bmi %>%
 	pivot_around_sex() # again, just cosmetics
 ```
 
-## 7. Using log-BMI
+### 7. Using log-BMI
 Better agreement between intervals based on normality assumption and empirical estimates. 
 ```{r}
 df_bmi %>% 
