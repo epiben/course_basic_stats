@@ -1,0 +1,311 @@
+---
+title: "Uge 8 notebook"
+author: "Benjamin Skov Kaas-Hansen"
+date: "10/28/2020"
+output: 
+  html_document: 
+    df_print: paged
+    theme: paper
+    toc: yes
+---
+
+# Mere infor
+
+- https://medium.com/nautilus-magazine/pick-the-statistic-you-want-to-be-98e1ea74c4aa
+
+# Opsætning
+Hvis du skal installere en pakke (f.eks. epitools), skal du huske at køre `install.packages("epitools")` (altså navnet i citationtegn). Du skal kun installere én gang (eller hvis du har opdateret R).
+```{r}
+library(epitools)
+library(broom)
+library(descr)
+library(plyr)
+library(tidyr)
+library(tidyverse)
+library(ggpubr) # needed for ggarrange function to combine plots
+
+knitr::opts_chunk$set(fig.align = "center")
+options(width = 120) # avoid wrapped output
+```
+
+## Små hjælperfunktioner
+```{r}
+pretty_estimates <- function(fit, ci_fun = confint.default) {
+	# confint.default laver Wald-intervaller, mens confint laver profile-likelihood-intervaller
+	bind_cols(tidy(fit), as_tibble(confint.default(fit), .name_repair = ~ c("p2.5", "p97.5"))) %>% 
+		select(term, estimate, p2.5, p97.5, everything())
+}
+
+pretty_coef <- function(m) { # m: model object
+	cbind(Est. = m$coefficients, confint(m))
+}
+```
+
+# Sandsynlighed og odds
+Et par illustrationer af sammenhængen mellem hhv. sandsynlighed (p) og odds/log(odds) samt risikoratio og oddsratio. Sandsynligheder ligger mellem 0 og 1, mens grænserne for odds er 0 og $\infty$, og grænserne for log-odds er $-\infty$ og $\infty$. Det har bl.a. som konsekvens, at odds altid kan blive dobbelt så stor (eller halveres), mens det jo ikke er tilfældet for sandsynlighed (det dobbelte er f.eks. 80% ville være 160%, hvilket jo ikke giver mening for en sandsynlighed.) De stiplede linier viser sammenhængen mellem sandsynlighed og hhv. odds og log(odds), hvis den var 1:1, hvilken den tydeligvis ikke er. Jo højere sandsynlighed, des mere afgiver odds:
+
+$$\textrm{odds} = \dfrac{p}{1-p} \implies \\ \textrm{odds}_{p=0} = \dfrac{0}{1} = 0, \\ \textrm{odds}_{p=0.25} = \dfrac{0.25}{0.75} = 0.33,\\ \textrm{odds}_{p=0.5} = \dfrac{0.5}{0.5} = 1,\\ \textrm{odds}_{p=0.75} = \dfrac{0.75}{0.25} = 3, \\ \textrm{odds}_{p=0.99} = \dfrac{0.95}{0.05} = 19$$
+
+log(odds) derimod afviger tiltagende fra sandsynligheden des længere væk fra p = 50% vi kommer.
+```{r}
+d <- tibble(p = seq(0.01, 0.99, 0.01), odds = p / (1 - p)) 
+	
+p_log_odds <- ggplot(d, aes(x = p, y = log(odds))) +
+	geom_line() +
+	geom_abline(intercept = -0.5, slope = 1, linetype = 2) +
+	scale_x_continuous(labels = scales::percent) +
+	scale_y_continuous(sec.axis = sec_axis(exp, "odds", breaks = exp(-2:2*2.5), labels = scales::number_format(0.01))) +
+	theme_minimal()
+
+p_odds <- ggplot(d, aes(x = p, y = odds)) +
+	geom_line() +
+	geom_abline(intercept = 0, slope = 1, linetype = 2) +
+	scale_x_continuous(labels = scales::percent) +
+	scale_y_continuous(sec.axis = sec_axis(log, "log(odds)", breaks = log(1:4*25), labels = scales::number_format(0.1))) +
+	theme_minimal()
+
+ggarrange(p_odds, p_log_odds, nrow = 1)
+```
+
+Risikoratioer og oddsratioer er lidt anderledes. Ved lave sandsynligheder i kontrolgruppen, er odds ratio ret tæt på risikoratioen. Men dette ændrer sig, når sandsynliheden i kontrolgruppen stiger (bemærk logaritmiske skalaer på akserne).
+```{r}
+tibble(p_control = seq(0.01, 0.99, 0.01),
+	   p_target_RR2 = p_control * 2,
+	   p_target_RR0.5 = p_control * 0.5,
+	   OR_RR2 = (p_target_RR2/(1-p_target_RR2)) / (p_control/(1-p_control)),
+	   OR_RR0.5 = (p_target_RR0.5/(1-p_target_RR0.5)) / (p_control/(1-p_control))) %>% 
+	pivot_longer(c(OR_RR2, OR_RR0.5), names_to = "OR", names_prefix = "OR_", values_to = "value") %>% 
+	mutate(OR = ifelse(OR == "RR2", "RR = 2", "RR = 0.5")) %>% 
+	filter(value > 0) %>% 
+	ggplot(aes(x = p_control, y = value, colour = OR)) +
+		geom_line() +
+		geom_hline(aes(yintercept = 2, colour = "RR = 2"), linetype = 2) +
+		geom_hline(aes(yintercept = 0.5, colour = "RR = 0.5"), linetype = 2) +
+		scale_y_log10(breaks = c(0.01, 0.1, 0.5, 1, 2, 10)) +
+		scale_x_log10(breaks = c(0.01, 0.1, 0.25, 0.5, 0.75, 1)) +
+		theme_minimal() +
+		labs(x = "Sandsynlighed i kontrolgruppen", y = "OR (fuldt optrukne)/RR (stiplede)")
+```
+
+# Graft vs. host disease
+
+## Data wrangling/manipulation
+```{r}
+graft <- read.table("http://publicifsv.sund.ku.dk/~lts/basal/data/gvhd.txt", header = TRUE) %>% 
+	mutate(type = factor(type, levels = 1:3, labels = c("AML", "ALL", "CML")),
+		   type_ALL = 1 * (type == "ALL"),
+		   type_CML = 1 * (type == "CML"),
+		   preg = factor(preg, levels = 0:1, labels = c("No", "Yes")),
+		   gvhd = factor(gvhd, levels = 0:1, labels = c("No", "Yes")),
+		   log_index = log(index),
+		   log2_index = log2(index)) %>% 
+	select(-pnr) 
+```
+
+## Kig på data
+Hurtigt overblik over data. Patienter ml. 13 og 43 år; aldersfordelinger ligner hinanden sandsynligvis pga. matching af donorer og modtagere.
+```{r}
+glimpse(graft) # groft overblik over data
+summary(graft) # overblik over fordelingen af hver variabel
+```
+
+Vi skal altid tegne, før vi må regne. Måske ser det ud til, at ældre i højere grad udviklet GvHD meeen det er svært at sige noget om
+```{r}
+ggplot(graft, aes(x = rcpage, y = donage, colour = gvhd)) +
+	geom_point() +
+	# geom_line() + # hvis man vil forbinde punkterne med linier (giver ikke så meget mening her)
+	geom_smooth(method = "lm", se = FALSE) + 
+	labs(x = "Recipient age", y = "Donor age") +
+	theme_minimal()
+```
+
+Med density plots ser der ikke rigtigt ud til at være nogen forskel
+```{r}
+ggplot(graft) +
+	stat_density(aes(x = rcpage, colour = "Recipients"), geom = "line") +
+	stat_density(aes(x = donage, colour = "Donors"), geom = "line") +
+	theme_minimal()
+```
+
+## Spørgsmål 1
+17 CvHD-cases, flest med CML. Signifikant forskel mellem frekvenser, men vi har få i hver celle, og de forventede værdier danser lidt rund om 5. 
+```{r}
+CrossTable(graft$type, graft$gvhd, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS", 
+		   prop.chisq = FALSE)
+```
+
+## Spørgsmål 2
+Brug `drop1()` da vi har $\geq 1$ variable (`factor`) med $\geq 1$ niveauer.
+```{r}
+fuld <- glm(gvhd ~ type + log_index + preg + donage + rcpage, data = graft, family = binomial)
+
+summary(fuld)
+pretty_estimates(fuld)
+drop1(fuld, test = "Chisq") # vi kan ikke se finde forskel på de tre sygdomsgruppe (p = 0.26)
+
+# drop1() bruger chi-sq til at lave likelihood-ratio test, mens summary() lavet Wald test
+# library(multcomp)
+# glht(fuld, linfct=matrix(c(0,0,0,1,0,0,0),1,7))
+```
+
+## Spørgsmål 3
+Vi bruger `update()` så vi hele tiden kan følge med i, hvad vi laver om (og sparer en masse tegn).
+```{r}
+ud1 <- update(fuld, . ~ . - rcpage)
+pretty_estimates(ud1)
+drop1(ud1, test = "Chisq")
+
+# Use explicitly the type variables, make new fuld model (= combine ALL and AML groups, i.e. the acute types)
+# drop1 no longer needed because no covariates have several levels (i.e. no factors)
+fuld1 <- glm(gvhd ~ type_ALL + type_CML + log_index + preg + donage + rcpage, data = graft, family = binomial)
+pretty_estimates(fuld1)
+
+ud1 <- update(fuld1, . ~ . - rcpage)
+pretty_estimates(ud1)
+
+ud2 <- update(ud1, . ~ . - type_ALL)
+pretty_estimates(ud2) # note that now the effect of type_CML is vs. both AML and ALL (before they were pairwise)
+```
+
+Fordi tre kovariater har lave p-værdier, forsøger vi at fjerne hver dem enkeltvis.
+```{r}
+mod1 <- update(ud2, . ~ . - type_CML)
+mod2 <- update(ud2, . ~ . - preg)
+mod3 <- update(ud2, . ~ . - donage)
+
+ldply(list(mod1 = mod1, mod2 = mod2, mod3 = mod3), pretty_estimates) # for all three, at least one other covariate becomes significant
+```
+
+Hvis vi havde fjernet `type` ovenfor i stedet for at dele den op, var vi kommet frem til et andet resultat.
+```{r}
+try1 <- update(fuld, . ~ . - rcpage - type)
+summary(try1) # læg mærke til, at denne faktisk er mage til mod1 ovenfor
+
+try2 <- update(try1, . ~ . - preg)
+summary(try2)
+```
+
+## Spørgsmål 4
+```{r}
+exp(pretty_coef(mod3)) 
+```
+
+## Spørgsmål 5
+```{r}
+slut_model <- update(mod3, . ~ . - log_index + log2_index)
+round(exp(pretty_coef(slut_model)), 2) # en fordobling i index øger odds 2.8 gange
+```
+
+### Prædiktere risiko for forskellige værdier af `log2_index`
+Vi gør brug af `expand.grid` hvilket laver alle kombinationer af vektorerne, du giver som input. Virkeligt god til denne slags opgaver, hvor du skal lave prædiktioner for mange variable (kaldes grid search).
+
+Linierne inden for hvert panel er (nok) parallelle på log(odds)-skalaen, men linierne er tegnet på sandsynlighedsskalaen (som vi faktisk er interesserede i), hvorfor de ikke er parallelle her i "klassisk" forstand. Kurverne er dog forskellige for donorer, der har været gravide, og donorer, der ikke har, hvilket kunne tyde på en interaktion mellem `index` og `preg`.
+```{r}
+pred_data <- expand.grid(log2_index = seq(-1, 3.3, 0.1), 
+						 type_CML = 0:1, 
+						 preg = c("No", "Yes")) %>% 
+	bind_cols(pred = predict(slut_model, newdata = ., type = "response")) %>% 
+	mutate(index = 2^log2_index,
+		   type = ifelse(type_CML == 1, "Kronisk", "Akut"))
+pred_data # første 3 kolonner af alle kombinationer, 4. kolonner er prædiktionerne for hver kombination,
+	# 5. kolonner er index (tilbageregnet fra log2_index), 6. kolonne er bare en pæn indikator til plottet
+
+ggplot(pred_data, aes(x = index, y = pred, colour = type)) +
+	geom_line() +
+	facet_wrap(~ preg) +
+	theme_minimal()
+```
+
+## Spørgsmål 6
+Så vi prøver at tilføje en interaktion, som faktisk har en p-værdi omkring 9%. 
+
+```{r}
+int <- update(slut_model, . ~ . + log2_index:preg)
+pretty_estimates(int)
+
+# Little trick to get the effect of the interaction is to take out the main effect (significance should be determined before)
+int2 <- update(int, . ~ . - log2_index)
+exp(pretty_coef(int2)) # the effect of index seems opposite for patient with and without previous pregnancies (albeit non-significant)
+```
+
+# Mordsager
+
+## Spørgsmål 1
+```{r}
+mord <- matrix(c(176, 430, 15, 53), nrow = 2, 
+			   dimnames = list(gerningsmand = c("black", "white"), drab = c("nej", "ja")))
+
+CrossTable(mord, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS", 
+		   prop.chisq = FALSE) # ikke evidens for forskel mellem sorte og hvide
+```
+
+Find forskellen i procentpoint og tilhørende CI
+```{r}
+diff(prop.table(mord, 1)[, 1]) # whites slightly lower proportion of no's
+prop.test(mord) # gives CI for the difference
+```
+
+Er der signifikant forskel på risikoratio?
+```{r}
+epitab(mord, method = "riskratio")
+```
+
+## Spørgsmål 2
+Vi laver en tidy data frame (= én række indeholdet én observation) med drabsdata
+```{r}
+mord_df <- expand.grid(death = c("yes", "no"),
+					gerningsmand = c("white", "black"),
+					offer = c("white", "black")) %>% 
+	mutate(antal = c(53, 414, 11, 37, 0, 16, 4, 139)) %>% 
+	uncount(antal)
+glimpse(mord_df)
+```
+
+```{r}
+with(mord_df, table(offer, gerningsmand))
+with(mord_df, table(offer, death))
+
+ftable(xtabs(~ offer + gerningsmand + death, mord_df))
+```
+
+```{r}
+CrossTable(mord_df$offer, mord_df$gerningsmand, expected = TRUE, chisq = TRUE, fisher = TRUE, 
+		   format = "SPSS", prop.chisq = FALSE)
+```
+
+```{r}
+CrossTable(mord_df$offer, mord_df$death, expected = TRUE, chisq = TRUE, fisher = TRUE, 
+		   format = "SPSS", prop.chisq = FALSE)
+```
+
+## Spørgsmål 3
+`death` ser ud til at være det samme som dødsdom.
+```{r}
+fuld_mord <- glm(death ~ offer + gerningsmand, data = mord_df, family = binomial)
+summary(fuld_mord)
+pretty_estimates(fuld_mord)
+fuld_mord_int <- update(fuld_mord, . ~ . + offer:gerningsmand)
+
+exp(pretty_coef(fuld_mord))
+exp(-pretty_coef(fuld_mord))
+```
+
+## Spørgsmål 4
+```{r}
+white_victim <- with(mord_df, table(gerningsmand[offer == "white"], death[offer == "white"]))
+black_victim <- with(mord_df, table(gerningsmand[offer == "black"], death[offer == "black"]))
+
+CrossTable(white_victim, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS", prop.chisq = FALSE)
+CrossTable(black_victim, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS", prop.chisq = FALSE)
+
+int <- glm(death ~ offer*gerningsmand, data = mord_df, family = "binomial")
+
+summary(int)
+drop1(int, test = "Chisq")
+exp(pretty_coef(int))
+
+int2 <- update(int, . ~ . - gerningsmand)
+summary(int2)
+exp(pretty_coef(int2))
+exp(-pretty_coef(int2))
+```

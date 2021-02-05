@@ -1,0 +1,249 @@
+---
+title: "Uge 6 notebook"
+author: "Benjamin Skov Kaas-Hansen"
+date: "10/7/2020"
+output: 
+  html_document: 
+    theme: paper
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center")
+```
+
+### Prep and setup
+```{r}
+library(tidyverse)
+theme_set(theme_minimal())
+
+pretty_estimates <- function(m) { # m: model object
+	cbind(Est. = m$coefficients, confint(m))
+}
+```
+
+# Notes and precautions
+Four assumptions need to be satisfied for a linear regression to be legit:
+
+- Linear relationship (eyeball it or use a smoother to see if the trend is approximately linear; with few observations numerical tests fail because they're underpowered so wouldn't be able to reject the hypothesis even if it were false)
+- Independent observations (if not, go for hierarchical regression)
+- Homogeneity of variance (homoscedacity): no "trumpet" of observations around line (variance should be the same throughout the range of the indepedent variable; in biological data this is often violated, because e.g. with a larger body your brain size has more "wiggle" room often leading to larger variance for larger bodies)
+- Residuals are normally distributed (so most observations should be closer to the regression line, and fewer far away)
+
+# Brain
+```{r}
+mus <- read.table("http://publicifsv.sund.ku.dk/~lts/basal/data/brain.txt", header = TRUE)
+```
+
+### Q1: Look at litter and brain scatter
+Seems to be a fairly linear negative relationship: larger litters, smaller brains.
+```{r}
+scatter.smooth(mus$litter, mus$brain, main = "SPM 1", 
+			   ylab = "brain weight", xlab = "litter size")
+
+ggplot(mus, aes(litter, brain)) +
+	geom_point() +
+	geom_smooth(method = "loess")
+```
+
+### Q2: Brain weight ~ litter size
+First, fit model and get results.
+```{r}
+model1 <- lm(brain ~ litter, data = mus)
+summary(model1)
+pretty_estimates(model1)
+```
+
+Scatterplot with overlain linear regression
+```{r}
+plot(mus$litter, mus$brain, main="SPM 2", 
+      ylab="brain weight", xlab="litter size", 
+      col="blue")
+abline(model1, col = "red", lwd = 2) 
+
+ggplot(mus, aes(litter, brain)) +
+	geom_point() +
+	geom_smooth(method = "lm")
+```
+
+#### a. Expected brain weight for litter size 5
+Because we're talking about the expected brain weight (so, the mean in a population), we use the `confidence` interval, as we're interested in an estimate of the confidence. NB! The Danish sentence is actually ambiguous, depending on which word you stress, so one could also read it to mean the weight of a specific mouse, rendering the prediction interval appropriate.
+```{r}
+litter5 <- data.frame(litter = 5)
+predict(model1, newdata = litter5, interval = "confidence")
+```
+
+#### b. Is a 0.4 g brain unusual?
+With this phrasing, we're interested in a particular mouse from a litter of size 5. So for that, we need the `prediction` interval, because the prediction for a specific mouse is more uncertain than the mean in a larger population. The `prediction` interval uses the residual variance because this captures (and expresses) unexplained randomness, and so the uncertainty of a prediction for a specific mouse should reflect this.  0.4 g is just inside the prediction interval, so unusual but not far out. 
+```{r}
+predict(model1, newdata = litter5, interval = "prediction")
+```
+
+### Q3: Brain weight ~ body weight
+```{r}
+model2 <- lm(brain ~ body, data = mus)
+summary(model2)
+pretty_estimates(model2)
+
+plot(mus$body, mus$brain, main="SPM 3", 
+      ylab="brain weight", xlab="body weight", 
+      col="blue")
+abline(model2, col="red",lwd=2)
+
+ggplot(mus, aes(body, brain)) +
+	geom_point() +
+	geom_smooth(method = "lm")
+```
+
+### Q4: Correlation, litter size and body weight
+Pearson assumes bivariate Gaussian distribution, so when you have non-random sampling of one of the variables (litter here, as we have to observation by litter size, so non-random) Pearson is a no-go. In general, don't do it: use linear regression instead. 
+
+Correlation in general goes up when the variance of the x variable goes up, so it's generally not useful as you can this way design your data collection to artificially amplify correlation. 
+```{r}
+cor.test(mus$litter, mus$body)
+cor.test(mus$litter, mus$body, method = "spearman")
+```
+
+By the way, if you square the Pearson correlation coefficient, you obtain the R-squared, making R-squared as useless as Pearson's coefficient.
+
+### Q5: Body weight ~ litter size
+Give biological explanation for the findings.
+```{r}
+model3 <- lm(body ~ litter, data = mus)
+summary(model3)
+cor.test(mus$litter, mus$body)$estimate^2 # same as R-squared
+pretty_estimates(model3)
+
+plot(mus$litter, mus$body, main = "SPM 5", 
+     ylab = "body weight", xlab = "litter size", 
+     col = "blue")
+abline(model3, col = "red", lwd = 2)
+
+ggplot(mus, aes(litter, body)) +
+	geom_point() +
+	geom_smooth(method = "lm")
+
+predict(model3, newdata = litter5, interval = "confidence")
+predict(model3, newdata = litter5, interval = "prediction")
+```
+
+### Q6: Multiple linear regression 
+```{r}
+model4 <- lm(brain ~ litter + body, data=mus)
+summary(model4)
+pretty_estimates(model4)
+```
+
+#### a. Expected brain weight for litter size 5 and body weight 10
+```{r}
+litter5_body10 <- data.frame(litter = 5, body = 10)
+predict(model4, newdata = litter5_body10, interval = "confidence")
+predict(model4, newdata = litter5_body10, interval = "prediction")
+```
+
+#### b. Explain difference from Q2a
+For litters of size 5, a body weight of 10 g. is quite unusual, as per the prediction interval:
+```{r}
+predict(model3, newdata = litter5, interval = "prediction")
+```
+
+--and so, the brain weight in such a (large) mouse is expected to also be higher.
+```{r}
+predict(model1, newdata = litter5, interval = "prediction")
+predict(model4, newdata = litter5_body10, interval = "prediction")
+```
+
+### Q7: Biological difference of coefficients in models 1 and 3
+There's a nice description in the "opgavebesvarelse". 
+
+# Biomasse
+```{r}
+bio <- read.table("http://publicifsv.sund.ku.dk/~lts/basal/data/biomasse.txt", header = TRUE)
+```
+
+### Q1: Might the relationship be linear?
+Use a scatter plot. It could be conceived as potentially linear, but it does seem a little sigmoid.
+```{r}
+plot(bio$sol, bio$biomass, main="SPM 1", 
+     ylab="biomasse i gram", xlab="solskin i timer", 
+     col="blue")
+
+ggplot(bio, aes(sol, biomass)) +
+	geom_line() +
+	geom_point() 
+```
+
+### Q2: Intercept and slope
+Particularly, can the sloe be considered be to 1? Nope, see summary.
+```{r}
+model1 <- lm(biomass ~ sol, data = bio)
+summary(model1)
+pretty_estimates(model1)
+```
+
+We could find the p value for $H_0: \beta = 1$ by instead using $H_0: \beta - 1 = 0$, and find the corresponding t value with its p value.
+```{r}
+tibble(t_value = (coef(model1)[2] - 1)/coef(summary(model1))[2, 2], # = (coef - 1)/se_coef)
+	   p_value = 2 * (1 - pt(t_value, summary(model1)$df[2])))
+```
+
+NB! It's misleading to do such a NHST for a specific value after seeing the data. Such tests must be devised before data collection.
+
+Visualing the data with the linear fit:
+```{r}
+plot(bio$sol, bio$biomass, main = "SPM 2", 
+     ylab = "biomasse i gram", xlab = "solskin i timer", 
+     col = "blue")
+abline(model1, col = "red", lwd = 2)
+
+
+ggplot(bio, aes(sol, biomass)) +
+	geom_smooth(method = "lm", alpha = 0.2, linetype = 2, size = 0.5) +
+	geom_line(colour = "grey70", size = 0.5) +
+	geom_point() 
+```
+
+
+### Q3: Could intercept be 0? And what happens to the slope?
+From the `model1` summary, we can't really argue that the intercept be 0 (p-value is 0.214 >> 0.05). If we assume this, we get the following fit (with a lower slope):
+```{r}
+model2 <- lm(biomass ~ sol - 1, data = bio)
+summary(model2)
+pretty_estimates(model2)
+
+pretty_estimates(model2)
+pretty_estimates(model1)
+
+plot(bio$sol, bio$biomass, main = "SPM 2", 
+     ylab = "biomasse i gram", xlab = "solskin i timer", 
+     col = "blue", xlim = c(0, 650), ylim = c(-20, 800))
+abline(model1, col="red", lwd = 2)
+abline(model2, col="blue", lwd = 2)
+
+ggplot(bio, aes(sol, biomass)) +
+	geom_line(colour = "grey70", size = 0.5) +
+	geom_point() +
+	geom_smooth(method = "lm", alpha = 0.2, linetype = 2, size = 0.5, colour = "red", se = FALSE) +
+	geom_smooth(method = "lm", formula = y ~ x - 1, alpha = 0.2, linetype = 2, size = 0.5, colour = "blue", se = FALSE) 
+```
+
+### Q4: 95% confidence interval for estimated production when cum. hours of sunshine reaches 200
+The no-intercept model predicts higher yield at 200 hours of sunshine because this point is shifted upwards compared with the normal linear model. The two lines cross around sol = 430. 
+```{r}
+sol200 <- data.frame(sol = 200)
+
+predict(model2, newdata = sol200, interval = "prediction")
+predict(model1, newdata = sol200, interval = "prediction")
+
+predict(model2, newdata = sol200, interval = "confidence")
+predict(model1, newdata = sol200, interval = "confidence")
+```
+
+Then, we redraw the scatterplot (unconnected to avoid cluttering) and colour the prediction intervals
+```{r}
+ggplot(bio, aes(sol, biomass)) +
+	geom_line(colour = "grey70", size = 0.5) +
+	geom_smooth(method = "lm", alpha = 0.2, linetype = 2, size = 0.5, colour = "red", fill = "red") +
+	geom_smooth(method = "lm", formula = y ~ x - 1, alpha = 0.2, linetype = 2, size = 0.5, colour = "blue", fill = "blue") +
+	geom_point() 
+```
