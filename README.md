@@ -1,5 +1,5 @@
 # Overview
-This repo holds the materials I've made for the uCopenhagen PhD course, "Basic statistics for health research".
+Materials for the PhD course "Basic statistics for health research" at University of Copenhagen.
 
 ### E21 - R intermediate track
 
