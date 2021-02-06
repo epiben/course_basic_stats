@@ -131,7 +131,7 @@ d %>%
 	transmute(z = x * 2)
 
 d %>% 
-	transmute(x, # just putting the variable there keeps the variable as-is of no modification needed
+	transmute(x, # just putting the variable there keeps the variable as-is if no modification needed
 			  z = x * 2)
 
 # rename()
