@@ -57,8 +57,8 @@ y * 2 # all good, it's a number
 
 x <- c("1", "22", "3", "2", "10")
 y <- c(1, 22, 3, 2, 10)
-sort(x) # start from the beginning of the word (so, "10" come before "2")
-sort(y) # knows that these are number, so sorting is correct
+sort(x) # start from the beginning of the word (so, "10" comes before "2")
+sort(y) # knows that these are numbers, so sorting is correct
 parse_number(x) %>% # nifty function from the readr package to numbers written as strings to actual numbers
 	sort() 
 ```
@@ -107,14 +107,14 @@ is.na(NA) # gives TRUE
 !c(TRUE, FALSE, TRUE, FALSE) # they become opposite
 !is.na(NA) 
 !is.na(x) # all except the last are not NA
-x[!is.na(x)] # pick only the values that are NA
+x[!is.na(x)] # pick only the values that aren't NA
 ```
-
 
 #### `dplyr`
 `dplyr` is built around a number of function with meaningful verb names, each with a specific purpose in data manipulation. First, a dummy data frame for the example:
 ```{r}
-d <- data.frame(x = c(1, 2, 3, 4, 5, 6), y = c("a", "b", "c", "c", "b", "a"))
+d <- data.frame(x = c(1, 2, 3, 4, 5, 6), 
+				y = c("a", "b", "c", "c", "b", "a"))
 ```
 
 Then the verbs:
