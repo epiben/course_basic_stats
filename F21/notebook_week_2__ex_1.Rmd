@@ -1,0 +1,209 @@
+---
+title: "Basic statistics for health research - week 2, ex. 1"
+author: "Benjamin Skov Kaas-Hansen"
+date: "11/2/2021"
+output: 
+  html_document: 
+    code_folding: show
+    df_print: tibble
+    highlight: haddock
+    theme: paper
+    toc: yes
+    toc_depth: 3
+---
+
+### Setup and loading packages
+
+```{r setup, warning=FALSE, message=FALSE}
+# Set default alignment of figures
+knitr::opts_chunk$set(fig.align = "center")
+
+# Data manipulation
+library(dplyr)
+library(tidyr)
+library(readr)
+library(scales) # for the percent() function
+
+# Modelling
+library(broom) # for tidy()
+
+# Data visualiation
+library(ggplot2)
+library(lindia) # for diagnostic plots of (generalised) linear models
+theme_set(theme_minimal()) # sets default theme for ggplots
+```
+
+### Helper functions
+
+```{r}
+pretty_estimates <- function(m) { # m: model object
+	cbind(Est. = m$coefficients, confint(m))
+}
+```
+
+### Importing and wrangling data
+Note how there's an empty column because all lines in the input file ends with a white space. It's automatically given the name `X4` by R, so I remove ("de-select") it. Usually you'd want to make sure that the database (or whatever source you have) doesn't produce such artefacts. Also note that if you use `read.csv` this column won't show up; I prefer, however, to know exactly what the data file looks like as this helps me prevent errors ("gargage-in-garbage-out").
+
+I prefer to keep all data wrangling in one place, even though you only find out as you go through your analysis. It's an iterative process. *Remember* to encode your categorical variables as `factor`s so R knows to treat handle them correctly. Also, it gives you the possibility to give them useful labels.
+
+```{r}
+df <- read_delim("http://staff.pubhealth.ku.dk/~sr/BasicStatistics/datasets/oeko.txt", delim = " ", na = ".") %>% 
+	transmute(sas_employee = factor(sas_ansat, c("nej", "ja"), c("No", "Yes")),
+			  abs_time = factor(abstid, 1:3, c("Short", "Medium", "Long")),
+			  concentration = konc,
+			  log10_concentration = log10(concentration))
+
+glimpse(df) # gives a nice overview of the actual values in the dataframe ≠ summary()
+```
+
+Get a few summary stats; we have `r nrow(df)` observations with `r ncol(df)` variables.
+```{r}
+summary(df)
+```
+
+### 1. Illustration of data
+Start by disregarding the abstinence variable:
+```{r}
+ggplot(df, aes(x = concentration, colour = sas_employee)) +
+	geom_density() 
+```
+
+The concentration is non-negative and has a long tail on the right so a log-transformation could be useful. Often biomarkers and the like are right-skewed because they can't go below zero, most people are somewhat closer to zero, and some are more extreme (creating the tail). It seems a log-transformed variable is better suited than the original.
+
+If you want to illustrate the log-transformed data, it's equivalent to the plot above but with another variable on the x axis:
+
+```{r}
+ggplot(df, aes(x = log10_concentration, colour = sas_employee)) +
+	geom_density() 
+```
+
+If you, however, want to illustrate your original data but on a log-scale, you need to scale the axis (note how this plot is identical to the one above except the tick labels on the x axis.)
+```{r}
+ggplot(df, aes(x = concentration, colour = sas_employee)) +
+	geom_density() +
+	scale_x_log10()
+```
+
+### 2. Quantify and compare concentration
+
+#### a. Estimate concentrations
+As you can see, 1.96 would be an excellent approximation to the "circa 2" factor.
+
+```{r}
+df %>% 
+	group_by(sas_employee) %>% 
+	summarise(mean_log10 = mean(log10_concentration),
+			  sem_log10 = sqrt(1 / n()) * sd(log10_concentration),
+			  circa_2 = qt(0.975, n() - 1),
+			  ci_lo_log10 = mean_log10 - circa_2 * sem_log10,
+			  ci_hi_log10 = mean_log10 + circa_2 * sem_log10,
+			  mean = 10^mean_log10,
+			  ci_lo = 10^ci_lo_log10,
+			  ci_hi = 10^ci_hi_log10)
+```
+
+#### b. Compare the estimates
+The 95% confidence intervals has a slight overlap suggesting difference between the means in the two groups. Note that the CI only says something about the expected value of the *mean* not about the distribution of concentrations in the two groups.
+
+#### c. + d. Compare distributions with t test
+This does not assume equal variance in the two groups, and comes out with a p value of 0.010 (so significant). Note that the difference is on the multiplicative scale due to the log-transformation. Because $\log A - \log B = \log(A/B)$ so when you back-transform, we get the ratio between the two and not the differnece. 
+```{r}
+t.test(log10_concentration ~ sas_employee, data = df) %>% 
+	tidy()
+```
+
+A test of equal variance actually suggests that variance not be different, so we could use that in the t test:
+```{r}
+var.test(log10_concentration ~ sas_employee, data = df)
+t.test(log10_concentration ~ sas_employee, data = df, var.equal = TRUE)
+```
+
+### 3. Sub-divide by abstinence time
+A few plots. Now that we have a third dimension (abstinence time), normal density plots become less useful.
+
+```{r}
+ggplot(df, aes(x = abs_time, y = concentration, fill = sas_employee)) +
+	geom_violin()
+
+ggplot(df, aes(x = abs_time, y = concentration, fill = sas_employee)) +
+	geom_violin() +
+	scale_y_log10()
+
+ggplot(df, aes(x = abs_time, y = concentration, fill = sas_employee)) +
+	geom_boxplot()
+
+# This scatterplot-like plot isn't ideal
+ggplot(df, aes(x = abs_time, y = concentration, colour = sas_employee)) +
+	geom_jitter(position = position_dodge2(width = 0.8))
+```
+
+Use `facet_wrap()` to put each level of abstinence time in its own sub-plot (instead of putting it on the x axis). The second plot has a log-transformed x axis.
+```{r}
+ggplot(df, aes(x = concentration, colour = sas_employee)) +
+	geom_density() +
+	facet_wrap(~ abs_time, ncol = 1)
+
+ggplot(df, aes(x = concentration, colour = sas_employee)) +
+	geom_density() +
+	scale_x_log10() +
+	facet_wrap(~ abs_time, ncol = 1)
+```
+
+#### Summary stats
+```{r}
+df %>% 
+	group_by(sas_employee, abs_time) %>% 
+	summarise(mean_log10 = mean(log10_concentration),
+			  sem_log10 = sqrt(1 / n()) * sd(log10_concentration),
+			  circa_2 = qt(0.975, n() - 1),
+			  ci_lo_log10 = mean_log10 - circa_2 * sem_log10,
+			  ci_hi_log10 = mean_log10 + circa_2 * sem_log10,
+			  mean = 10^mean_log10,
+			  ci_lo = 10^ci_lo_log10,
+			  ci_hi = 10^ci_hi_log10,
+			  n_obs = n()) %>% 
+	ungroup() %>% # remove grouping
+	mutate(prop_obs = percent(n_obs / sum(n_obs)))
+```
+
+The `stat_summary` is useful for plotting e.g. mean and uncertainty intervals; `"mean_cl_boot"` produces non-parametrics confidence intervals. I dodge the points and lineranges to we can see them. It seems that the mean changes with abstinence time for non-employees unlike for the employees (mean between 60 and 80 with no obvious trend, although there could be a slight upward trend within the confidence limits).
+```{r}
+ggplot(df, aes(x = abs_time, y = concentration, colour = sas_employee)) +
+	stat_summary(fun.data = "mean_cl_boot", position = position_dodge2(width = 0.2))
+```
+
+### 4. ANOVA model
+The estimate of the difference between employees and non-employees, for a fixed value of abstinence time, is `10^-0.19`% = `r 10^-0.19`%
+
+```{r}
+mod <- lm(log10_concentration ~ abs_time + sas_employee, data = df)
+summary(mod)
+
+# Get estimate on the log10 scale
+pretty_estimates(mod)
+
+# Get estimates on the real scale (bottom row is the answer)
+10^pretty_estimates(mod)
+```
+
+To get a proper significance estimate, we cannot use the p value for the multi-level variable `abs_time`, so instead we use the `anova` function. Both variables are significant (although abs_time borderline).
+```{r}
+anova(mod)
+```
+
+Let's take a look at the predicted values from the model (to see if there's sign of interaction):
+```{r}
+df %>% 
+	mutate(pred_log10 = predict(mod)) %>% 
+	ggplot(aes(x = abs_time, y = pred_log10, colour = sas_employee, group = sas_employee)) +
+		geom_line() +
+		geom_point()
+```
+
+But we have actually made a multiple linear regression model, and we should do some controls to ascertain that the assumptions of such models are met. The `lindia` package is quite nifty for these plots.
+```{r, fig.height=10, fig.width=7}
+gg_diagnose(mod)
+```
+
+#### Interaction model
+I'm leaving this out for now as it's basically the same again and we come back to linear models and interactions therein later. 
