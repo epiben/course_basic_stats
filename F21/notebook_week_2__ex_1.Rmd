@@ -5,11 +5,10 @@ date: "11/2/2021"
 output: 
   html_document: 
     code_folding: show
-    df_print: tibble
+    df_print: kable
     highlight: haddock
     theme: paper
     toc: yes
-    toc_depth: 3
 ---
 
 ### Setup and loading packages
@@ -191,13 +190,14 @@ To get a proper significance estimate, we cannot use the p value for the multi-l
 anova(mod)
 ```
 
-Let's take a look at the predicted values from the model (to see if there's sign of interaction):
+Let's take a look at the predicted values from the model (to see if there's sign of interaction). The mappings (so what's inside the `aes` call) set in `ggplot` are shared across all layers, so below both the lines and points get their coordinators and colour specifications from the "global" setting.
 ```{r}
 df %>% 
 	mutate(pred_log10 = predict(mod)) %>% 
 	ggplot(aes(x = abs_time, y = pred_log10, colour = sas_employee, group = sas_employee)) +
 		geom_line() +
-		geom_point()
+		geom_point() +
+		scale_y_continuous(limits = c(0, NA)) # forces the y axis to start in (0,0)
 ```
 
 But we have actually made a multiple linear regression model, and we should do some controls to ascertain that the assumptions of such models are met. The `lindia` package is quite nifty for these plots.
