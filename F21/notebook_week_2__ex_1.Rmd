@@ -5,10 +5,10 @@ date: "11/2/2021"
 output: 
   html_document: 
     code_folding: show
-    df_print: kable
     highlight: haddock
     theme: paper
     toc: yes
+    df_print: paged
 ---
 
 ### Setup and loading packages
