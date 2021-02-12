@@ -1,5 +1,5 @@
 # Overview
-Materials for the PhD course "Basic statistics for health research" at University of Copenhagen.
+Materials for the PhD course "Basic statistics for health research" at University of Copenhagen. Note that the data frames don't print very well when you view the HTML files online; if you download the files and open them offline in your web browser, it should be better. 
 
 ### E21 - R intermediate track
 
