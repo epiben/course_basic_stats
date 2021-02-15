@@ -5,10 +5,10 @@ date: "11/2/2021"
 output: 
   html_document: 
     code_folding: show
+    df_print: kable
     highlight: haddock
     theme: paper
     toc: yes
-    df_print: paged
 ---
 
 ### Setup and loading packages
@@ -165,7 +165,7 @@ df %>%
 	mutate(prop_obs = percent(n_obs / sum(n_obs)))
 ```
 
-The `stat_summary` is useful for plotting e.g. mean and uncertainty intervals; `"mean_cl_boot"` produces non-parametrics confidence intervals. I dodge the points and lineranges to we can see them. It seems that the mean changes with abstinence time for non-employees unlike for the employees (mean between 60 and 80 with no obvious trend, although there could be a slight upward trend within the confidence limits).
+The `stat_summary` is useful for plotting e.g. mean and uncertainty intervals; `"mean_cl_boot"` produces non-parametric confidence intervals. I dodge the points and lineranges to we can see them. It seems that the mean changes with abstinence time for non-employees unlike for the employees (mean between 60 and 80 with no obvious trend, although there could be a slight upward trend within the confidence limits.)
 ```{r}
 ggplot(df, aes(x = abs_time, y = concentration, colour = sas_employee)) +
 	stat_summary(fun.data = "mean_cl_boot", position = position_dodge2(width = 0.2))
