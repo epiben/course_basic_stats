@@ -7,7 +7,7 @@ I've made a "live" document where I add snippets used when answerigns questions 
 
 | Week | Topic(s) | Exercise 1 | Exercise 2 |
 |:-----|:--------:|:----------:|:----------:|
-| 0 | Snippets and little coding examples | [Rmarkdown](F21/snippets.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/snippets.html) | — |
+| 0 | Snippets and little coding examples | [ [Rmarkdown](F21/snippets.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/snippets.html) ] | — |
 | 1 | Basic concepts in statistics | [ [Rmarkdown](F21/notebook_week_1__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_1__ex_1.html) \] | \[coming\] |
 | 2 | Comparing groups | [ [Rmarkdown](F21/notebook_week_2__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_2__ex_1.html) \] | \[coming\] |
 | 3 | Categorical data and tables | [ [Rmarkdown](F21/notebook_week_3__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_3__ex_1.html) \] | NA* |
