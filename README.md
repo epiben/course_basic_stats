@@ -3,8 +3,6 @@ Materials for the PhD course "Basic statistics for health research" at Universit
 
 ### E21 - R intermediate track
 
-I've made a "live" document where I add snippets used when answerigns questions in the course forum: [open snippets](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/snippets.html)
-
 | Week | Topic(s) | Exercise 1 | Exercise 2 |
 |:-----|:--------:|:----------:|:----------:|
 | 0 | Snippets and little coding examples | [ [Rmarkdown](F21/snippets.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/snippets.html) ] | — |
