@@ -50,7 +50,7 @@ qbeta(c(0.025, 0.975), 0.5 + 2, 0.5 + 73)
 #### Differences in discharge probability
 ```{r}
 res <- prop.test(astma)
-with(res, c(estimate[1] - estimate[2], conf.int)) %>% 
+c(res$estimate[1] - res$estimate[2], res$conf.int) %>% 
 	setNames(c("estimate", "ci_95_lo", "ci_95_hi"))
 ```
 
@@ -58,11 +58,15 @@ with(res, c(estimate[1] - estimate[2], conf.int)) %>%
 We use the `rev` argument to tell the function that we want to use placebo as the control group and hospitalised as the reference outcome (so discharge is the desired outcome). We could also just have defined our contingency table correctly from the beginning...
 
 ```{r}
+epitab(astma)
 epitab(astma, method = "oddsratio", rev = "both")
 epitab(astma, method = "riskratio", rev = "both")
 ```
 
+Note that odds ratio computed by `epitab` is different from that returned by Fisher test. This is due to `epitab`'s default settings. You can get the same estimate by setting the `oddsratio` argument (note that when you explicate how to compute the oddsratio with the argument, you don't need to also specify the `method`):
+```{r}
+epitab(astma, rev = "both", oddsratio = "fisher")
+```
+
 ### 6. Conclusion
 No coding needed, see the "official" answers to exercise.
-
-
