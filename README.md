@@ -10,7 +10,7 @@ Materials for the PhD course "Basic statistics for health research" at Universit
 | 2 | Comparing groups | [ [Rmarkdown](F21/notebook_week_2__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_2__ex_1.html) \] | \[coming\] |
 | 3 | Categorical data and tables | [ [Rmarkdown](F21/notebook_week_3__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_3__ex_1.html) \] | NA* |
 | 6 | Multiple regression | [ [Rmarkdown](F21/notebook_week_6__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_6__ex_1.html) \] | \[coming\] |
-| 7 | Interactions | [ [Rmarkdown](F21/notebook_week_7__ex_1.Rmd) \| [ [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_7__ex_1.html) \] | [Rmarkdown](F21/notebook_week_7__ex_2.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_7__ex_2.html) \] |
+| 7 | Interactions | [ [Rmarkdown](F21/notebook_week_7__ex_1.Rmd) \|  [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_7__ex_1.html) \] | [ [Rmarkdown](F21/notebook_week_7__ex_2.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_7__ex_2.html) \] |
 
 \* Nothing interesting coding-wise, so just read the official answers.
 
