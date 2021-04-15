@@ -1,0 +1,120 @@
+---
+title: "Basic statistics for health research - week 8, ex. 2"
+author: "Benjamin Skov Kaas-Hansen"
+date: "15/04/2021"
+output: 
+  html_document: 
+    df_print: paged
+    theme: paper
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+# Opsætning
+Hvis du skal installere en pakke (f.eks. epitools), skal du huske at køre `install.packages("epitools")` (altså navnet i citationtegn). Du skal kun installere én gang (eller hvis du har opdateret R).
+```{r}
+library(epitools)
+library(broom)
+library(descr)
+library(tidyr)
+library(tidyverse)
+
+knitr::opts_chunk$set(fig.align = "center")
+options(width = 120) # avoid wrapped output
+```
+
+## Små hjælperfunktioner
+```{r}
+pretty_estimates <- function(fit, ci_fun = confint.default) {
+	# confint.default laver Wald-intervaller, mens confint laver profile-likelihood-intervaller
+	bind_cols(tidy(fit), as_tibble(confint.default(fit), .name_repair = ~ c("p2.5", "p97.5"))) %>% 
+		select(term, estimate, p2.5, p97.5, everything())
+}
+
+pretty_coef <- function(m) { # m: model object
+	cbind(Est. = m$coefficients, confint(m))
+}
+```
+
+# Mordsager
+
+## Spørgsmål 1
+```{r}
+mord <- matrix(c(176, 430, 15, 53), nrow = 2, 
+			   dimnames = list(gerningsmand = c("black", "white"), drab = c("nej", "ja")))
+
+CrossTable(mord, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS", 
+		   prop.chisq = FALSE) # ikke evidens for forskel mellem sorte og hvide
+```
+
+Find forskellen i procentpoint og tilhørende CI
+```{r}
+diff(prop.table(mord, 1)[, 1]) # whites slightly lower proportion of no's
+prop.test(mord) # gives CI for the difference
+```
+
+Er der signifikant forskel på risikoratio?
+```{r}
+epitab(mord, method = "riskratio")
+```
+
+## Spørgsmål 2
+Vi laver en tidy data frame (= én række indeholdet én observation) med drabsdata
+```{r}
+mord_df <- expand.grid(death = c("yes", "no"),
+					gerningsmand = c("white", "black"),
+					offer = c("white", "black")) %>% 
+	mutate(antal = c(53, 414, 11, 37, 0, 16, 4, 139)) %>% 
+	uncount(antal)
+glimpse(mord_df)
+```
+
+```{r}
+with(mord_df, table(offer, gerningsmand))
+with(mord_df, table(offer, death))
+
+ftable(xtabs(~ offer + gerningsmand + death, mord_df))
+```
+
+```{r}
+CrossTable(mord_df$offer, mord_df$gerningsmand, expected = TRUE, chisq = TRUE, fisher = TRUE, 
+		   format = "SPSS", prop.chisq = FALSE)
+```
+
+```{r}
+CrossTable(mord_df$offer, mord_df$death, expected = TRUE, chisq = TRUE, fisher = TRUE, 
+		   format = "SPSS", prop.chisq = FALSE)
+```
+
+## Spørgsmål 3
+`death` ser ud til at være det samme som dødsdom.
+```{r}
+fuld_mord <- glm(death ~ offer + gerningsmand, data = mord_df, family = binomial)
+summary(fuld_mord)
+pretty_estimates(fuld_mord)
+fuld_mord_int <- update(fuld_mord, . ~ . + offer:gerningsmand)
+
+exp(pretty_coef(fuld_mord))
+exp(-pretty_coef(fuld_mord))
+```
+
+## Spørgsmål 4
+```{r}
+white_victim <- with(mord_df, table(gerningsmand[offer == "white"], death[offer == "white"]))
+black_victim <- with(mord_df, table(gerningsmand[offer == "black"], death[offer == "black"]))
+
+CrossTable(white_victim, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS", prop.chisq = FALSE)
+CrossTable(black_victim, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS", prop.chisq = FALSE)
+
+int <- glm(death ~ offer*gerningsmand, data = mord_df, family = "binomial")
+
+summary(int)
+drop1(int, test = "Chisq")
+exp(pretty_coef(int))
+
+int2 <- update(int, . ~ . - gerningsmand)
+summary(int2)
+exp(pretty_coef(int2))
+exp(-pretty_coef(int2))
+```
