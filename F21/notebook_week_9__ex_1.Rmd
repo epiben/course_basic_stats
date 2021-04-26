@@ -1,0 +1,311 @@
+---
+title: "Basic statistics for health research - week 9, ex. 1"
+author: "Benjamin Skov Kaas-Hansen"
+date: "22/04/2021"
+output: 
+  html_document: 
+    # code_folding: hide
+    self-contained: true
+    highlight: haddock
+    theme: flatly
+    toc: yes
+    toc_depth: 6
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Opsætning
+
+```{r, message=FALSE, warning=FALSE}
+library(survival)
+library(prodlim)
+library(timereg)
+library(car)
+library(epitools)
+library(broom)
+library(descr)
+library(plyr) # skal loaded før dplyr (som loades sammen med tidyverse nedenfor)
+library(tidyr)
+library(tidyverse)
+library(survminer)
+library(tableone)
+library(rms)
+
+options(width = 100) # avoid wrapped output
+theme_set(theme_minimal())
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+## Små hjælperfunktioner
+```{r}
+pretty_estimates <- function(fit, ci_fun = confint.default) {
+	# confint.default laver Wald-intervaller, mens confint laver profile-likelihood-intervaller
+	bind_cols(tidy(fit), as_tibble(confint.default(fit), .name_repair = ~ c("p2.5", "p97.5"))) %>% 
+		select(term, estimate, p2.5, p97.5, everything())
+}
+
+pretty_coef <- function(m, trans = identity, n_digits = 2) { # m: model object
+	cbind(Est. = m$coefficients, confint(m)) %>% # combine estimate and CI
+		trans() %>% # apply transformation (default is none = identity)
+		round(n_digits) # cosmetics
+}
+```
+
+# Indlæs data
+```{r}
+wr <- read.table("http://publicifsv.sund.ku.dk/~lts/basal/data/pbc.txt", header = TRUE)
+glimpse(wr) 
+
+# Cut-points for hhv. lineære splines og binned bilirubin
+quantile(filter(wr, dead == 1)$bilirubin, c(0.25, 0.5, 0.75))
+quantile(filter(wr, dead == 1)$bilirubin, c(1/3, 2/3))
+
+wr <- wr %>% 
+	mutate(event = factor(dead, levels = 0:1, labels = c("Censored", "Dead")),
+		   time_to_event = months, # informative name ("months" is the unit, not the value)
+		   treatment = factor(azathiop, levels = 0:1, labels = c("Placebo", "Azathioprine")),
+		   bl_bilirubin = bilirubin, # again, informative name
+		   log2_bl_bilirubin = log2(bilirubin),
+		   bl_bilirubin_p25 = (bl_bilirubin - 31) * (bl_bilirubin > 31), # linear splines
+		   bl_bilirubin_p50 = (bl_bilirubin - 54) * (bl_bilirubin > 54),
+		   bl_bilirubin_p75 = (bl_bilirubin - 119.5) * (bl_bilirubin > 119.5),
+		   bl_bilirubin_binned = cut(bl_bilirubin, c(0, 37, 92, max(bl_bilirubin)))) %>% 
+	as_tibble() # nicer output in console (e.g. only 10 rows by default)
+
+wr
+summary(wr)
+```
+
+# Spørgsmål 1
+
+## a. Kaplan-Meier curves
+
+- Vi har punktvise CI med for at kunne vurdere, om der er forskel på grupperne
+- Ingen tydelige forskelle (muligvis let divergens til sidst)
+- Flere overkrydsninger, hvilket her mest tyder på ingen forskel (hvilket også er en form for proportionalitet); dog kunne det muligvis se ud til, at der ingen forskel er i starten, men at effekten sætter ind senere i opfølgsningsperioden. Generelt tyder overkrydsninger på, at antagelsen om proportionelle hazards ikke er overholdt, særligt, hvis kurverne først divergerer og senere konvergerer.
+
+```{r}
+km1 <- prodlim(Hist(time_to_event, dead) ~ treatment, data = wr)
+km1
+plot(km1)
+```
+
+## b. Et test
+
+Log-Rank test er det korrekte test her. Testet siger ikke noget om effektstørrelsen, kun om der er en forskel. Med en p-værdi i nærheden af 0.5 kan vi altså ikke afvise hypotesen om ingen forskel.
+
+```{r}
+survdiff(Surv(time_to_event, dead) ~ treatment, data = wr)
+```
+
+## c. Estimat for effektstørrelsen af azathioprin
+```{r}
+cox1 <- coxph(Surv(time_to_event, dead) ~ treatment, data = wr)
+summary(cox1)
+pretty_coef(cox1, trans = exp) # hazard ratio med CI-grænser for effekten af azathioprin
+
+# Ny model med ændret reference i treatment factor
+cox2 <- coxph(Surv(time_to_event, dead) ~ relevel(treatment, "Azathioprine"), data = wr)
+pretty_coef(cox2, exp)
+exp(-pretty_coef(cox1)) # giver det samme pga. symmetri i parvis sammenligning
+
+# Alternativ fra survminer-pakken
+#    kræver ekstra arbejde for at blive rigtigt godt men det kan det så også blive ift. base-graphics, 
+#    som prodlim-fittet ovenfor bruger
+cox1_fit_alt <- surv_fit(Surv(time_to_event, dead) ~ treatment, data = wr)
+ggsurvplot(cox1_fit_alt, risk.table = TRUE) 
+```
+
+# Spørgsmål 2
+
+## a. Er s-bilirubin skævt fordelt?
+
+```{r}
+# ggplot's histogram giver to måde at definere bredden: binwidth eller bins (antal)
+qplot(wr$bl_bilirubin, bins = 20, xlab = "S-bilirubin ved baseline", ylab = "N") 
+qplot(wr$log2_bl_bilirubin, binwidth = 0.5, xlab = "S-bilirubin ved baseline (log2-transformeret)", ylab = "N")
+
+# Alternative with actual values but on log2-scale
+qplot(wr$bl_bilirubin, bins = 20, xlab = "S-bilirubin ved baseline", ylab = "N") +
+	scale_x_continuous(trans = "log2")
+```
+
+- Den er temmeligt skæv
+- Det gælder for mange biomarkører, da de ikke kan være lavere end 0, men der sagtens kan være stor spredning i højre side af fordelingen
+- Skævheden i sig selv er ikke et problem (husk i regressioner er det ikke kovariaternes fordelinger der skal være normalfordelt, men derimod residualerne; mange går i vandet dér)
+- Problemet med skæve fordelinger er derimod, at der kan være outliers, som får uforholdsmæssig stor betydning for estimaterne, fordi de trækker mere, end de burde. Dette kan føre til ustabile estimater: hvis én observation trækker rigtigt meget i estimaterne, ændres estimaterne meget, hvis denne ikke var blevet registreret (eller hvis den korrekte værdi var blevet registreret, hvis det viser sig at være en datafejl)
+- Derudover er 1:1-ændringer ofte ikke de mest informative for skæve fordelinger: en ændring i s-bilirubin på 10 er mere biologisk relevant i den lave ende (fra f.eks. 10 til 20) end i den høje ende (fra 410 til 420)
+
+## 2b. Hvilken "udgave" af s-bilirubin er bedst
+Vi tager begge med i en model samtidigt, først i en model uden behandlingskovariaten, hvilket viser, at den log2-transformerede kovariat er klart mest informativ (p-værdi for associationen meget lavere end kovariaten på den oprindelige skala)
+
+```{r}
+cox2 <- coxph(Surv(time_to_event, dead) ~ bl_bilirubin + log2_bl_bilirubin, data = wr)
+summary(cox2)
+```
+
+Og analysen *med* behandlingsindikatoren giver samme billede (læg dog mærke til, at behandlingseffekt pludseligt er signifikant...)
+```{r}
+cox3 <- coxph(Surv(time_to_event, dead) ~ treatment + bl_bilirubin + log2_bl_bilirubin, data = wr)
+summary(cox3)
+```
+
+## 2c. Modellere effekten af baseline s-bilirubin vha. lineær spline
+Vi har ikke rigtigt nogen god ide om, hvor spline-knudepunkterne skal være, så bruger kvartiler i stedet. Se også tabel 2.3 i *Frank Harrell - Regression modelling techniques*. Det er disse værdier, vi bruger til at definere vore data i toppen. 
+
+`linearHypothesis` tester, hvorvidt hældningerne af *alle* tre segmenter i den lineære spline er 0. Vi finder, der **ikke** er en lineær sammenhæng ($p \ll 0.001$), og vi bør altså ikke bruge `bl_bilirubin` direkte i modellen, da dette jo antager linearitet mellem denne kovariat og udfaldet. Som I ved, skal man altid regne før, vi må regne, så det husker vi lige at gøre også.
+
+```{r}
+quantile(filter(wr, event == "Dead")$bl_bilirubin, c(0.25, 0.5, 0.75))
+
+cox4 <- coxph(Surv(time_to_event, dead) ~ treatment + bl_bilirubin + bl_bilirubin_p25 + 
+			  	bl_bilirubin_p50 + bl_bilirubin_p75, data = wr)
+summary(cox4)
+linearHypothesis(cox4, sprintf("bl_bilirubin_p%s = 0", c(25, 50, 75)))
+
+# Alternativ med lsp (lsp = linear spline) fra rms-pakken (kræver kun knudepunkter; intet behov for ekstra datakolonner)
+cox4a <- coxph(Surv(time_to_event, dead) ~ treatment + lsp(bl_bilirubin, c(31, 54, 119.5)), data = wr)
+
+cox4b <- coxph(Surv(time_to_event, dead) ~ treatment + log2_bl_bilirubin + lsp(log2_bl_bilirubin, log2(c(31, 54, 119.5))), data = wr)
+summary(cox4a)
+
+linearHypothesis(cox4a, sprintf("lsp(bl_bilirubin, c(31, 54, 119.5))bl_bilirubin%s = 0", c("'", "''", "'''")))
+
+summary(cox4b)
+```
+
+Det kræver lidt forarbejde at lave plottet, men det er relativt hurtigt klaret. Det ligner temmeligt meget effekten, vi fandt med log2-transformationen, hvilken er en del lettere at arbejde med. 
+```{r}
+make_spline <- function(x, knot) {
+	(x - knot) * (x > knot)
+} 
+plot_df <- expand.grid(treatment = c("Placebo", "Azathioprine"),
+					   bl_bilirubin = min(wr$bl_bilirubin):max(wr$bl_bilirubin)) %>% 
+	mutate(bl_bilirubin_p25 = make_spline(bl_bilirubin, 31),
+		   bl_bilirubin_p50 = make_spline(bl_bilirubin, 54),
+		   bl_bilirubin_p75 = make_spline(bl_bilirubin, 119.5),
+		   log2_bl_bilirubin = log2(bl_bilirubin)) %>% 
+	ddply("treatment",
+		  function(d) mutate(d, lin_pred_cox4 = predict(cox4, newdata = d, type = "lp"),
+		  				   lin_pred_cox3 = predict(cox3, newdata = d, type = "lp")))
+
+ggplot(plot_df, aes(x = bl_bilirubin, colour = treatment)) +
+	geom_line(aes(y = lin_pred_cox4, linetype = "Linear spline")) +
+	geom_line(aes(y = lin_pred_cox3, linetype = "log2-transformed")) +
+	labs(x = "S-bilirubin ved baseline", y = "Linear predictor")
+
+# Alternativ hvis vi havde brugt lsp i stedet for selv at lave spline-variable
+plot_df2 <- expand.grid(treatment = c("Placebo", "Azathioprine"),
+					   bl_bilirubin = min(wr$bl_bilirubin):max(wr$bl_bilirubin)) %>% 
+	mutate(log2_bl_bilirubin = log2(bl_bilirubin)) %>% 
+	ddply("treatment",
+		  function(d) mutate(d, lin_pred_cox4 = predict(cox4a, newdata = d, type = "lp"),
+		  				   lin_pred_cox3 = predict(cox3, newdata = d, type = "lp")))
+
+ggplot(plot_df2, aes(x = bl_bilirubin, colour = treatment)) + # plot-delen er helt mage til ovenfor
+	geom_line(aes(y = lin_pred_cox4, linetype = "Linear spline")) +
+	geom_line(aes(y = lin_pred_cox3, linetype = "log2-transformed")) +
+	labs(x = "S-bilirubin ved baseline", y = "Linear predictor")
+```
+
+# Spørgsmål 3 + 4
+Resultaterne ovenfor mere end antyder, at en log2-transformation af s-bilirubin ved baseline er den rette tilgang. log2-transformationen er også lettere at arbejde med end den lineære spline. Fortolkning: en fordobling i s-bilirubin ved baseline er associeret med godt og vel en fordobling i dødsraten. Dette ændrer også ved resultatet af hovedanalysen: effekten af azathioprin, som nu sænker dødsraten til 59% af dødsraten blandt placebobehandlede patienter *med samme s-bilirubin ved baseline*. 
+```{r}
+cox6 <- coxph(Surv(time_to_event, dead) ~ azathiop + log2_bl_bilirubin, data = wr)
+summary(cox6)
+pretty_coef(cox6, exp)
+```
+
+# Spørgsmål 5
+Se også pointer i officielle besvarelse. Lad os lave en stratificeret tabel (dette bør jo egentligt være noget af det første, man gør).
+```{r}
+CreateTableOne(c("event", "time_to_event", "bl_bilirubin", "log2_bl_bilirubin"), 
+			   strata = "treatment", data = wr) %>% 
+	print(catDigits = 0, contDigits = 1, test = FALSE, nonnormal = c("time_to_event", "bl_bilirubin"))
+```
+
+# Spørgsmål 6: Model-kontrol for Cox-modellen
+
+## a. Grafisk kontrol af PH-antagelse
+
+- Linierne bør være parallelle på cloglog-skalaen
+- Flere overkrydsninger frem til 60 måneder (= bryder egentligt proportional-hazards-antagelse)
+- Varierende afstand mellem kurverne
+- Men mest ligger de nok oven i hinanden, hvilket jo også er en måde at være parallelle på
+
+```{r}
+survfit(Surv(time_to_event, dead) ~ treatment, data = wr) %>% 
+	plot(col = 1:2, fun = "cloglog")
+```
+
+## b. Grafisk kontrol af effekten af bilirubin
+Vi er nødt til at inddele værdierne i nogle grupper, og vi vælger 33- og 67-percentilerne. Dette er allerede gjort øverst, så vi holder al datamanipulation ét sted. Vi har set fordelingen af denne variabel tidligere med `summary(wr)`. 
+```{r}
+cox7 <- coxph(Surv(time_to_event, dead) ~ treatment + strata(bl_bilirubin_binned), data = wr)
+summary(cox7)
+
+survfit7 <- survfit(cox7, newdata = data.frame(treatment = "Placebo"))
+plot(survfit7, fun = "cloglog", ylab = "log(-log(S))", col = 1:3, mark.time = FALSE, xlab = "Months")
+legend("topleft", levels(wr$bl_bilirubin_binned), lty = 1, col = 1:3, title = "Bilirubin", inset = .01)
+
+# Alternativt plot
+plot_df <- tibble(time = survfit7$time, 
+				  survival = survfit7$surv, 
+				  stratum = unlist(alply(survfit7$strata, 1, function(.) rep(names(.), .)))) %>% 
+	mutate(cloglog = log(-log(survival))) 
+ggplot(plot_df, aes(time, cloglog, colour = stratum)) +
+	geom_step() +
+	scale_x_continuous(trans = "log10")
+```
+
+## c.-e.
+```{r}
+set.seed(42) 
+ca1 <- cox.aalen(Surv(time_to_event, dead) ~ prop(treatment) + prop(log2_bl_bilirubin), data = wr)
+summary(ca1)
+```
+
+`p-value H_0` giver ret høje p-værdier for proportionale rater, hvilket ikke tyder på, at denne antagelse er brudt. Det samme indtryk får vi at det tilsvarende plot; de kumulative residualer skal gerne ligge og danse rundt omring 0. De ligger lidt højt i starten, hvilket tyder på, patienter med høje værdier for disse (= de behandlede og dem med høje bilirubin-tal ved baseline) dør "for hurtigt" i starten. 
+
+```{r}
+plot(ca1, score = TRUE)
+```
+
+Da `log2_bl_bilirubin` er en kontinuert kovariat, ønsker vi et formelt test af dennes linearitet, som giver en p-værdi på ca. 85%, hvilket ikke tyder på problemer. Der ser ikke ud til at være mønstre i plottet, hvilket passer godt med linearitetsantagelsen.
+```{r}
+set.seed(42 ) 
+ca2 <- cox.aalen(Surv(time_to_event, dead) ~ prop(treatment) + prop(log2_bl_bilirubin), data = wr,
+				 residuals = 1, n.sim = 0)
+resids <- cum.residuals(ca2, cum.resid = 1, data = wr)
+summary(resids)
+plot(resids, score = 2)
+```
+
+### Med tidsafhængig effekt af azathioprin
+```{r}
+tt_fun_az <- function(x, t, ...) { # denne laver 3 vinduer
+	cbind(dt1 = (x == "Azathioprine") * (t <= 12), # dt = delta time, time period
+		  dt2 = (x == "Azathioprine") * (12 < t & t <= 56), 
+		  dt3 = (x == "Azathioprine") * (t > 56))
+}
+
+cox8 <- coxph(Surv(time_to_event, dead) ~ tt(treatment) + log2_bl_bilirubin, data = wr, tt = tt_fun_az)
+summary(cox8)
+linearHypothesis(cox8, c("tt(treatment)dt1 = tt(treatment)dt2","tt(treatment)dt2 = tt(treatment)dt3"))
+```
+
+### Med tidsafhængig effekt af baseline s-bilirubin
+```{r}
+quantile(filter(wr, dead == 1)$time_to_event, 1:2 / 3) # to find cut points for changing hazard ratios
+
+tt_fun_lb <- function(x, t, ...) { # denne laver 3 vinduer vha. cut points fundet ovenfor
+	cbind(dt1 = x * (t <= 19), # dt = delta time, time period
+		  dt2 = x * (19 < t & t <= 50), 
+		  dt3 = x * (t > 50))
+}
+
+cox9 <- coxph(Surv(time_to_event, dead) ~ treatment + tt(log2_bl_bilirubin), data = wr, tt = tt_fun_lb)
+summary(cox9)
+linearHypothesis( cox9, c("tt(log2_bl_bilirubin)dt1 = tt(log2_bl_bilirubin)dt2",
+                          "tt(log2_bl_bilirubin)dt2 = tt(log2_bl_bilirubin)dt3"))
+```
