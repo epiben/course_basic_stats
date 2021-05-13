@@ -1,0 +1,463 @@
+---
+title: "Basic statistics for health research - week 10, ex. 1"
+author: "Benjamin Skov Kaas-Hansen"
+date: "29/4/2021"
+output: 
+  html_document: 
+    theme: paper
+    toc: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center")
+```
+
+### Prep and setup
+```{r}
+library(nlme)
+library(lattice)
+library(lindia)
+library(mgcv)
+library(tidyverse)
+library(descr)
+library(patchwork)
+
+theme_set(theme_minimal())
+
+pretty_estimates <- function(m) { # m: model object
+	cbind(Est. = m$coefficients, confint(m))
+}
+```
+
+### Load data
+```{r}
+lang <- read_delim("http://publicifsv.sund.ku.dk/~lts/basal/data/varicer.txt", delim = " ") %>% 
+	mutate(patient = factor(patient),
+		   treat = factor(treat, levels = c("P", "A")))
+
+lang5 <- lang %>% 
+	filter(minutter <= 5)
+```
+
+### Q1
+
+```{r}
+ggplot(lang, aes(x = minutter, y = pressure, colour = patient)) +
+	geom_line(alpha = 0.5, show.legend = FALSE) +
+	geom_point(size = 1, show.legend = FALSE) +
+	facet_wrap(~ treat, nrow = 1) 
+
+lang %>% 
+	group_by(treat) %>% 
+	summarise(n_patients = n_distinct(patient))
+
+lang %>% 
+	group_by(patient) %>% 
+	summarise(n_obs = n())
+
+# Fewer and fewer patients, mainly in placebo arm (not a good sign)
+lang %>% 
+	group_by(minutter, treat) %>% 
+	summarise(n_patients = n_distinct(patient)) %>% 
+	ggplot(aes(x = minutter, y = n_patients, colour = treat)) +
+		geom_line() +
+		coord_cartesian(ylim = c(0, NA))
+
+# Mean VP develops
+lang %>% 
+	group_by(treat, minutter) %>% 
+	summarise(mean_vp = mean(pressure)) %>% 
+	ggplot(aes(x = minutter, y = mean_vp, colour = treat)) +
+		geom_line() +
+		coord_cartesian(ylim = c(0, NA))
+```
+
+### Q2
+
+```{r}
+ggplot(lang, aes(x = minutter, y = pressure, colour = patient)) +
+	geom_line(alpha = 0.5, show.legend = FALSE) +
+	geom_point(size = 1, show.legend = FALSE) +
+	facet_wrap(~ treat, nrow = 1) +
+	# geom_label(aes(label = patient), ~ filter(., minutter == 0), size = 8/ggplot2::.pt) +
+	# facet_wrap(~ patient) +
+	coord_cartesian(xlim = c(0, 5)) # Q2
+```
+One patient is quite different from the rest in the active arm (suddent drop around 2 minutes in). To identify the person we can add labels to the lines (or plot them individually, see the two commented-out lines above) and we see it patient 13. Let's remove this patient for now as it seems an outlier of some sort and difficult to model. 
+
+Restrict population and time span
+```{r}
+lang <- lang %>% 
+	filter(patient != 13, minutter <= 5)
+```
+
+### Q3
+```{r}
+# Plot mean over time by arm
+plot_df <- lang %>% 
+	group_by(treat, minutter) %>% 
+	summarise(mean_vp = mean(pressure),
+			  sd_vp = sd(pressure), 
+			  .groups = "drop")
+
+plot_mean_vp <- ggplot(plot_df, aes(x = minutter, y = mean_vp, colour = treat)) +
+	geom_line() +
+	coord_cartesian(ylim = c(0, NA))
+
+plot_sd_vp <- ggplot(plot_df, aes(x = minutter, y = sd_vp, colour = treat)) +
+	geom_line() +
+	coord_cartesian(ylim = c(0, NA))
+
+plot_mean_vp /
+	plot_sd_vp
+```
+
+This is *not* expected: values drop too quickly after 3 minutes, due to the low patient count. Otherwise the standard deviation is pretty stable over timer and no too different between groups. This difference it likely that those in the placebo with higher presssures are lost. 
+
+At each follow-up time we lose patients, and because those lost patients have higher VP's, the mean will of course decrease as well. 
+
+With respect to randomisation, we need to look at the baseline measurements, where the two groups seem quite comparable. Little differences are to be expected as it's a little population and randomisation can't account for random variance. We shouldn't do a test per se, but if one were to do it it would be a T-test:
+
+```{r}
+t.test(pressure ~ treat, data = filter(lang, minutter == 0))
+```
+
+We could test the difference at a specific time point, say, after 5 minutes:
+```{r}
+t.test(pressure ~ treat, data = filter(lang, minutter == 5))
+with(t.test(pressure ~ treat, data = filter(lang, minutter == 5)),
+	 c(diff(rev(estimate)), conf.int))
+
+table(filter(lang, minutter == 5)$treat) # very few observations, so non-parametric test perhaps better
+wilcox.test(pressure ~ treat, data = filter(lang, minutter == 5))
+```
+
+Anyway, don't read too much into this as we didn't account to loss to follow-up. But we do start a table for the results:
+
+```{r}
+result <- tibble(metode = "3d: T-test efter 5 minutter", 
+				 behandlingseffekt_5_minutter = "-0.27 (-7.57, 7.01)", 
+				 p_value = 0.92)
+```
+
+
+#### e)
+Two approaches:
+
+- T-test
+- ANCOVA model
+```{r}
+lang <- lang %>% 
+	mutate(dif05 = pressure - baseline)
+
+t.test(dif05 ~ treat, data = filter(lang, minutter == 5)) 
+
+result <- result %>% 
+	rbind(c("3e: T-test på ændring 0-5 minutter", "-7.61 (-12.88, -2.33)", 0.015))
+```
+Almost nothing changes in placebo group, but rather large change in active arm. We add the signs to results to make them consistent. 
+
+```{r}
+ancova <- lm(pressure ~ baseline + treat, data = filter(lang, minutter == 5))
+summary(ancova)
+pretty_estimates(ancova)
+
+result <- result %>% 
+	rbind(c("3e: ANCOVA, baseline som kovariat", "-5.20 (-12.76, 2.37)", 0.14))
+
+pred_df <- expand.grid(treat = c("P", "A"),
+					   baseline = 10:30) %>% 
+	mutate(pressure_pred = predict(ancova, newdata = .))
+
+ggplot(filter(lang, minutter == 5), aes(x = baseline, y = pressure, colour = treat)) +
+	geom_point() +
+	geom_line(aes(y = pressure_pred), pred_df) +
+	labs(x = "Baseline pressure", y = "Pressure at 5 minuttes")
+```
+
+The plot doesn't convey much information but serves only to show what we model: the treatment effect, which is the (constant!) vertical difference between the curves. 
+
+### Q4
+From now we look at all measurements and not just a specific point in time.
+
+```{r}
+lang <- lang %>% 
+	mutate(treatA_minutter = ifelse(treat == "A", minutter, 0),
+		   minutter_fct = factor(minutter),
+		   treatA_minutter_fct = factor(treatA_minutter))
+
+xtabs(~ treat + treatA_minutter, data = filter(lang, minutter <= 5))
+
+model4 <- lme(pressure ~ minutter_fct + treatA_minutter_fct,
+			  random = ~ 1 | patient, 
+			  na.action = na.exclude, 
+			  data = filter(lang, minutter <= 5))
+summary(model4) # disregard the correlation matrix that just clutters everything
+```
+
+#### Large residuals
+```{r}
+resids <- residuals(model4, level = 0) # population level
+cov <- extract.lme.cov(model4) 
+L <- t(chol(cov)) # transposed cholesky defactorisation of the covariance matrix
+
+plot_df <- tibble(scaled_residuals = solve(L) %*% resids, # solve(L) yields the inversed L
+				  fitted_values = fitted(model4,level = 0))
+
+ggplot(plot_df) +
+	geom_qq_line(aes(sample = scaled_residuals), colour = "grey60") +
+	geom_qq(aes(sample = scaled_residuals), size = 0.5) 
+
+ggplot(plot_df, aes(x = fitted_values, y = scaled_residuals)) +
+	geom_jitter(size = 0.5) +
+	geom_smooth()
+```
+
+#### Conditional residuals
+```{r}
+qplot(x = fitted(model4,level=1), y = scale(resid(model4,level=1))) +
+	geom_hline(yintercept = 0)
+
+qplot(sample = scale(resid(model4)), geom = "qq") +
+	geom_qq_line()
+
+qplot(scale(resid(model4)))
+```
+
+#### b) Quantification of effect
+Tungen lige i munden: `minutter_fct*` correspond to the deviation from the common mean of the placebo group, whereas the `treatA_minutter_*` corresponds to the difference between the placebo group and active arm. Thus, we can't give a single estimate but must resort so timepoint-specific estimates because we didn't make any assumptions about an overall trend from which the two groups could deviate. And we can see significant difference from the 2-minute mark onward. 
+```{r}
+intervals(model4)
+
+intervals(model4)$fixed[21, ] # estimates at specific time point
+```
+The estimates are *much* different from the naive ones found earlier (3d) but more like those of 3e, however with much narrower confidence interval. This is because the current analysis included much more data, and this lends information to each specific time point. 
+
+We add the results to the table:
+```{r}
+result <- result %>% 
+	rbind(c("4b: CS-model med minutter som class", "-8.42 (-11.33, -5.53)", 0.0000))
+```
+
+There is a significant difference between the two groups overall.
+```{r}
+model4_ml <- lme(pressure ~ minutter_fct + treatA_minutter_fct,
+				 random = ~ 1 | patient, 
+				 na.action = na.exclude, 
+				 data = filter(lang, minutter <= 5),
+				 method = "ML")
+
+model4_red <- update(model4_ml, . ~ minutter_fct)
+
+anova(model4_ml, model4_red)
+```
+
+Models with lower AIC and BIC (but larger log-likelihood) are preferred, so modelling the difference between groups improves the model significantly. AIC and BIC account somewhat for the fact that a model with many parameters needs to be a lot better to be preferred.
+
+```{r}
+plot_df <- model4$data %>% 
+	mutate(pred4_fix = predict(model4,level=0), # fixed effects
+		   pred4 = fitted(model4)) # patient-level effects
+
+ggplot(plot_df, aes(x = minutter, y = pred4_fix, colour = treat)) +
+	geom_line() +
+	geom_point() +
+	coord_cartesian(ylim = c(0, NA))
+
+ggplot(plot_df, aes(x = minutter, y = pred4, colour = patient)) +
+	geom_line() +
+	geom_point() +
+	facet_wrap(~ treat, nrow = 1)
+```
+
+### Q5
+Three things to notice:
+
+- The $\phi$ (phi) parameter (0.96) is the correlation between two observations *in the same patient* 1 minute apart. Actual neighbour observations are only 0.5 minutes apart, and they will have a correlation of $\sqrt{\phi} = \sqrt{0.96} \approx 0.98$. 
+- Because of the autoregressive nature of the model, there isn't much room for the random effect of patient (the `(Intercept)` of the `StdDev` parameter is close to 0).
+- AIC is a lot lower for this model than for the one with an unstructured covariance structure, so we prefer this one and use from now. 
+
+```{r}
+model5a <- lme(pressure ~ minutter_fct + treatA_minutter_fct,
+			   random = ~1 | patient, 
+			   na.action = na.exclude, 
+			   correlation = corCAR1(0.9, ~ minutter | patient, FALSE), 
+			   data = filter(lang, minutter <= 5))
+summary(model5a)
+intervals(model5a, which = "fixed")$fixed[21, ] # note we must specify which
+
+model5a_ml <- update(model5a, method = "ML")
+model5a_red <- update(model5a, . ~ minutter_fct, method = "ML")
+anova(model5a_ml, model5a_red) # still significantly better model *with* group differences
+
+result <- result %>% 
+	rbind(c("5: SP(POW)-model med minutter som class", "-7.80 (-12.00, -3.61)", 0.0003))
+```
+
+```{r}
+compute_residuals <- function(model) {
+	large_resids <- residuals(model, level = 0)
+	cov <- extract.lme.cov(model, lang) 
+	L <- t(chol(cov)) 
+	
+	model$data %>% 
+		mutate(large_resids_scaled = as.numeric(solve(L) %*% large_resids),
+			   conditional_resids_scaled = as.numeric(scale(resid(model))),
+			   fitted_values = fitted(model, level = 0))
+}
+
+ggplot(compute_residuals(model5a), aes(sample = large_resids_scaled)) +
+	geom_qq() +
+	geom_qq_line()
+
+ggplot(compute_residuals(model5a), aes(x = fitted_values, y= large_resids_scaled)) +
+	geom_point() + 
+	geom_smooth()
+
+ggplot(compute_residuals(model5a), aes(sample = conditional_resids_scaled)) +
+	geom_qq() +
+	geom_qq_line()
+```
+
+```{r}
+plot_df <- model5a$data %>% 
+	mutate(pred5_fix = predict(model5a, level = 0), # fixed effects
+		   pred5 = fitted(model5a)) # patient-level effects
+
+ggplot(plot_df, aes(x = minutter, y = pred5_fix, colour = treat)) +
+	geom_line() +
+	geom_point()
+
+# This plot shows that the predictions for all patients are almost the same unlike model4
+ggplot(plot_df, aes(x = minutter, y = pred5, colour = patient)) +
+	geom_line() +
+	geom_point() +
+	facet_wrap(~ treat, nrow = 1)
+```
+
+### Q6: 
+```{r}
+model6a <- lme(pressure ~ minutter + treat:minutter, 
+			   random = ~ 1 | patient, 
+			   data = lang,
+			   correlation = corCAR1(0.9, ~ minutter | patient, FALSE), 
+			   na.action = na.omit)
+
+summary(model6a)
+
+ggplot(compute_residuals(model6a), aes(sample = large_resids_scaled)) +
+	geom_qq() +
+	geom_qq_line()
+
+ggplot(compute_residuals(model6a), aes(x = fitted_values, y= large_resids_scaled)) +
+	geom_point() + 
+	geom_smooth()
+
+ggplot(compute_residuals(model6a), aes(sample = conditional_resids_scaled)) +
+	geom_qq() +
+	geom_qq_line()
+```
+
+```{r}
+plot_df <- model6a$data %>% 
+	mutate(pred_fix = predict(model6a, level = 0), # fixed effects
+		   pred = fitted(model6a)) # patient-level effects
+
+ggplot(plot_df, aes(x = minutter, y = pred_fix, colour = treat)) +
+	geom_line() +
+	geom_point()
+
+ggplot(plot_df, aes(x = minutter, y = pred, colour = patient)) +
+	geom_line() +
+	geom_point() +
+	facet_wrap(~ treat, nrow = 1)
+```
+
+Compare with model 5A
+```{r}
+model6a_ml = update(model6a, method = "ML")
+
+anova(model5a_ml, model6a_ml)
+
+# The estimated effect at 5 minutes (because linear we multiply by 5)
+intervals(model6a, which="fixed")$fixed[3,] * 5
+
+result <- result %>% 
+	rbind(c("6a: SP(POW)-model med lineær effekt af tid", "-7.58 (-11.41, -3.74)", 0.0001))
+```
+
+#### b) Random-effect linear regression
+```{r}
+model6b <- lme(pressure ~ minutter + treat:minutter,  
+			   random = ~ 1 + minutter | patient, 
+			   na.action = na.omit, 
+			   data = lang)
+
+summary(model6b)
+
+ggplot(compute_residuals(model6b), aes(sample = large_resids_scaled)) +
+	geom_qq() +
+	geom_qq_line()
+
+ggplot(compute_residuals(model6b), aes(x = fitted_values, y= large_resids_scaled)) +
+	geom_point() + 
+	geom_smooth()
+
+ggplot(compute_residuals(model6b), aes(sample = conditional_resids_scaled)) +
+	geom_qq() +
+	geom_qq_line()
+
+ggplot(compute_residuals(model6b), aes(x = minutter, y = conditional_resids_scaled, colour = patient)) +
+	geom_line() +
+	geom_point() +
+	facet_wrap(~ treat, nrow = 1)
+```
+
+```{r}
+plot_df <- model6b$data %>% 
+	mutate(pred_fix = predict(model6b, level = 0), # fixed effects
+		   pred = fitted(model6b)) # patient-level effects
+
+ggplot(plot_df, aes(x = minutter, y = pred_fix, colour = treat)) +
+	geom_line() +
+	geom_point()
+
+ggplot(plot_df, aes(x = minutter, y = pred, colour = patient)) +
+	geom_line() +
+	geom_point() +
+	facet_wrap(~ treat, nrow = 1)
+
+# Again, linear model so we just multiply the coefficient by 5 
+intervals(model6b, which = "fixed")$fixed[3, ] * 5 
+
+result <- result %>% 
+	rbind(c("6b: Random-effects regression", "-7.82 (-11.76, -3.89)", 0.0001))
+```
+
+Models 6a and 6b have the same mean-value structure, so we can compare them directly. The AR(1) model has a lower AIC so we prefer that as it fits the data better. 
+```{r}
+anova(model6a, model6b)
+```
+
+
+### Q7
+Including the outlier doesn't change the overall conclusion (active-arm patients have a steeper trend) and the trend is even amplified. This makes sense if we consider the data of that outlier. 
+```{r}
+model7 = lme(pressure ~ minutter + treat:minutter, 
+			 random = ~ 1 | patient, data = lang5,
+			 correlation = corCAR1(0.9, ~ minutter | patient, FALSE), 
+			 na.action = na.omit)
+
+summary(model7)
+intervals(model7)$fixed[3, ] * 5
+
+result <- result %>% 
+	rbind(c("7: som 6a, med person nr. 13", "-8.07 (-11.93, -4.21)", 0.0001))
+
+result
+# diagnostics as for model 6a
+```
+
+

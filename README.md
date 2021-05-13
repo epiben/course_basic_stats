@@ -13,6 +13,7 @@ Materials for the PhD course "Basic statistics for health research" at Universit
 | 7 | Interactions | [ [Rmarkdown](F21/notebook_week_7__ex_1.Rmd) \|  [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_7__ex_1.html) \] | [ [Rmarkdown](F21/notebook_week_7__ex_2.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_7__ex_2.html) \] |
 | 8 | Logistic regression | [ [Rmarkdown](F21/notebook_week_8__ex_1.Rmd) \|  [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_8__ex_1.html) \] | [ [Rmarkdown](F21/notebook_week_8__ex_2.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_8__ex_2.html) \] |
 | 9 | Survival analysis and Cox regression | [ [Rmarkdown](F21/notebook_week_9__ex_1.Rmd) \|  [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_9__ex_1.html) \] | NA |
+| 10 | Repeated measurements | [ [Rmarkdown](F21/notebook_week_19__ex_1.Rmd) \|  [HTML](https://htmlpreview.github.io/?https://github.com/epi-ben/course_basic_stats/blob/master/F21/notebook_week_10__ex_1.html) \] | NA |
 
 \* Nothing interesting coding-wise, so just read the official answers.
 
