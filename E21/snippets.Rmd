@@ -1,0 +1,38 @@
+---
+title: "Basic statistics for health research - snippets"
+author: "Benjamin Skov Kaas-Hansen"
+date: "19/2/2021"
+output: 
+  html_document: 
+    code_folding: show
+    df_print: tibble
+    highlight: haddock
+    theme: paper
+    toc: yes
+    toc_depth: 3
+---
+
+### Add mean to boxplot
+```{r}
+library(tidyverse)
+
+vit <- read_csv("http://publicifsv.sund.ku.dk/~sr/BasicStatistics/datasets/vitamin.csv") %>% 
+	mutate(country = factor(country, levels = c(1, 2, 4, 6), labels = c("DK", "SF", "EI", "PL")))
+
+ggplot(vit, aes(x = country, y = vitd)) +
+	geom_boxplot() +
+	stat_summary(fun = mean, geom = "point", size = 4, colour = "dodgerblue", shape = "diamond")
+```
+
+### Cross-tabulations of contingency table with test statistics
+Note the warning about the approximation (sone expected counts <5), so use Fisher's test instead.
+```{r}
+library(descr)
+
+# Create toy data
+cont_table <- matrix(c(3, 10, 8, 14), nrow = 2,
+                     dimnames = list(arm = c("active", "control"), outcome = c("yes", "no")))
+
+CrossTable(cont_table, expected = TRUE, chisq = TRUE, fisher = TRUE, format = "SPSS") 
+```
+
