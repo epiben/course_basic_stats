@@ -1,0 +1,197 @@
+---
+title: "Basic statistics for health research - week 4, ex. 1"
+author: "Benjamin Skov Kaas-Hansen"
+date: "30/9/2021"
+output: 
+  html_document: 
+    code_folding: show
+    df_print: tibble
+    highlight: haddock
+    theme: paper
+    toc: yes
+---
+
+### Setup and loading packages
+
+```{r setup, warning=FALSE, message=FALSE}
+# Set default alignment of figures
+knitr::opts_chunk$set(fig.align = "center")
+
+library(tidyverse) # dplyr, readr and ggplot2 (+ others we won't use)
+library(broom)
+library(purrr)
+library(tidyr)
+library(descr)
+# library(lindia) # for diagnostic plots of (generalised) linear models
+
+theme_set(theme_minimal()) # sets default theme for ggplots
+```
+
+### 0. Helper functions
+
+```{r}
+pretty_estimates <- function(m) { # m: model object
+	cbind(Est. = m$coefficients, confint(m))
+}
+```
+
+```{r}
+bmd <- read_delim("http://publicifsv.sund.ku.dk/~lts/basal/data/calcium_modi.txt", 
+				  delim = " ", na = ".") %>% 
+	mutate(treat = factor(treat, levels = c("P", "C")), # make placebo reference level
+		   delta_bmd = bmd5 - bmd1,
+		   lost_to_fu = is.na(bmd5), # lost to follow-up
+		   delta_bmd_annual = delta_bmd * dage / 365) # should be 365.25
+```
+
+### 1)
+```{r}
+ggplot(bmd, aes(x = bmd1, y = bmd5, colour = treat)) +
+	geom_point(alpha = 0.5) # make semi-transparent to now hide overlain points
+
+ggplot(bmd, aes(x = dage, y = delta_bmd, colour = treat)) +
+	geom_point(alpha = 0.5)
+```
+
+### 2+3)
+```{r}
+bmd %>% 
+	split(.$treat) %>% 
+	map(summary)
+
+ggplot(bmd, aes(x = treat, y = bmd1)) +
+	geom_boxplot()
+
+t.test(bmd1 ~ treat, data = bmd) # bør man ikke pga. randomisering
+t.test(bmd5 ~ treat, data = bmd)
+```
+
+Hvis man gerne vil kunne se fordelinger af bmd1 og bmd5 inden for hver behandlingsgruppe, kan man f.eks. gøre således
+```{r}
+ggplot(bmd, aes(x = treat)) +
+	geom_boxplot(aes(y = bmd1, colour = "bmd1"), position = position_nudge(-0.2), width = 0.3) +
+	geom_boxplot(aes(y = bmd5, colour = "bmd5"), position = position_nudge(0.2), width = 0.3)
+```
+
+Det bliver dog hurtigt noget rod med masser af manuel finpudsning for at få plottet til at se nogenlunde ud. I stedet er det bedre at ændre dataformatet og plotte på det.
+```{r}
+bmd %>% 
+	select(treat, bmd1, bmd5) %>% # ikke nødvendig
+	pivot_longer(cols = c("bmd1", "bmd5"), names_to = "variable", values_to = "value") %>% 
+	ggplot(aes(x = treat, y = value, colour = variable)) +
+		geom_boxplot()
+```
+
+
+### 4)
+```{r}
+ggplot(bmd, aes(x = bmd1, y = bmd5, colour = treat)) +
+	geom_smooth(method = "lm", se = FALSE, size = 0.5) +
+	geom_point(alpha = 0.5) 
+```
+
+#### a.
+```{r}
+model1 <- lm(bmd5 ~ bmd1 + treat, data = bmd)
+summary(model1)
+pretty_estimates(model1)
+
+bmd09 <- tibble(bmd1 = 0.9, treat = "C")
+bmd09
+
+predict(model1, newdata = bmd09, interval="confidence")
+
+predict(model1, newdata = bmd09, interval="prediction")
+
+```
+
+#### b.
+```{r}
+# expand.grid makes a data frame with all combinations of its input vectors
+pred_bmd <- expand.grid(bmd1 = seq(0.7, 1.1, length.out = 100),
+						treat = c("P", "C")) %>% 
+	mutate(bmd5 = predict(model1, newdata = .)) %>% 
+	as_tibble()
+pred_bmd
+
+ggplot(mapping = aes(x = bmd1, y = bmd5, colour = treat)) +
+	geom_point(data = bmd) +
+	geom_line(data = pred_bmd)
+```
+
+### 5+6)
+```{r}
+ggplot(bmd, aes(x = treat, y = delta_bmd)) +
+	geom_boxplot()
+
+bmd %>% 
+	group_by(treat) %>% 
+	summarise(tidy(t.test(delta_bmd, mu = 0)))
+
+t.test(delta_bmd ~ treat, data = bmd)
+```
+
+### 7)
+```{r}
+ggplot(bmd, aes(x = bmd1, y = delta_bmd, colour = treat)) +
+	geom_smooth(method = "lm", se = FALSE, size = 0.5) +
+	geom_point(alpha = 0.5) +
+	labs(x = "BMD at baseline", y = "Change in BMD", title = "Question 7", 
+		 subtitle = "More details on the plot, e.g. a quick interpretation",
+		 caption = "(here you could e.g. put copyright information)")
+```
+
+
+```{r}
+model2 <- lm(delta_bmd ~ bmd1 + treat, data = bmd)
+summary(model2)
+pretty_estimates(model2)
+
+predict(model2, newdata = bmd09, interval = "confidence")
+predict(model2, newdata = bmd09, interval = "prediction")
+```
+
+Dette svarer helt til ovenfor:
+```{r}
+pred_bmd <- expand.grid(bmd1 = seq(0.7, 1.1, length.out = 100),
+						treat = c("P", "C")) %>% 
+	mutate(delta_bmd = predict(model2, newdata = .)) %>% 
+	as_tibble()
+
+ggplot(mapping = aes(x = bmd1, y = delta_bmd, colour = treat)) +
+	geom_point(data = bmd) +
+	geom_line(data = pred_bmd)
+```
+
+### 8)
+```{r}
+model3 <- lm(delta_bmd ~ bmd1 * treat, data = bmd)
+# same as lm(delta_bmd ~ bmd1 + treat + bmd1:treat, data = bmd)
+summary(model3)
+pretty_estimates(model3)
+
+predict(model3, newdata = bmd09, interval = "confidence")
+predict(model3, newdata = bmd09, interval = "prediction")
+```
+
+### 9)
+```{r}
+t.test(delta_bmd_annual ~ treat, data = bmd)
+
+model4 <- lm(delta_bmd ~ dage + treat, data = bmd)
+summary(model4)
+pretty_estimates(model4)
+
+model5 = lm(delta_bmd ~ bmd1 + dage + treat, data = bmd)
+summary(model5)
+pretty_estimates(model5)
+```
+
+### 10)
+```{r}
+CrossTable(bmd$lost_to_fu, bmd$treat, format = "SPSS", prop.chisq = FALSE,
+		   expected = TRUE, chisq = TRUE, fisher = TRUE)
+
+ggplot(bmd, aes(x = lost_to_fu, y = bmd1, colour = treat)) +
+	geom_boxplot()
+```
