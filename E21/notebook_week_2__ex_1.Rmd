@@ -1,0 +1,142 @@
+---
+title: "Basic statistics for health research - week 2, ex. 1"
+author: "Benjamin Skov Kaas-Hansen"
+date: "16/9/2021"
+output: 
+  html_document: 
+    code_folding: show
+    df_print: kable
+    highlight: haddock
+    theme: paper
+    toc: yes
+---
+
+### Setup and loading packages
+
+```{r setup, warning=FALSE, message=FALSE}
+# Set default alignment of figures
+knitr::opts_chunk$set(fig.align = "center")
+
+# Data manipulation
+library(dplyr)
+library(tidyr)
+library(readr)
+library(scales) # for the percent() function
+
+# Modelling
+library(broom) # for tidy()
+
+# Data visualiation
+library(ggplot2)
+library(lindia) # for diagnostic plots of (generalised) linear models
+theme_set(theme_minimal()) # sets default theme for ggplots
+```
+
+### Helper functions
+
+```{r}
+pretty_estimates <- function(m) { # m: model object
+	cbind(Est. = m$coefficients, confint(m))
+}
+```
+
+## Resting metabolic rate
+
+### 1. 
+
+As before, there's an extra (empty) column. Note that unfortunate naming (the dataframe has the same name as one of its columns.)
+```{r}
+rmr <- read_delim("http://publicifsv.sund.ku.dk/~lts/basal/data/rmr.txt", delim = " ")
+
+rmr_scatter <- ggplot(rmr, aes(x = bw, y = rmr)) +
+	geom_point() +
+	labs(x = "Body weight", y = "Resting metabolic rate")
+
+rmr_scatter
+```
+
+### 2. 
+We just build on the scatterplot made above, no need to recreate it from scratch.
+```{r}
+rmr_scatter +
+	stat_smooth()
+```
+
+```{r}
+model1 <- lm(rmr ~ bw, data = rmr)
+summary(model1)
+
+pretty_estimates(model1) # helper function defined at the top
+```
+
+### 3. 
+```{r}
+predict(model1, newdata = data.frame(bw = 70), interval = "confidence")
+
+# The three are all equivalent (but the last definitely a hassle)
+40:140
+seq(40, 140)
+c(40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140)
+
+new_df <- data.frame(bw = 40:140)
+predict(model1, newdata = new_df, se.fit = TRUE)
+
+pred_df <- new_df %>% 
+	mutate(estimate = predict(model1, newdata = new_df))
+
+predl <- predict(model1, newdata = new_df, interval = "prediction") %>% 
+	as.data.frame() %>% 
+	bind_cols(new_df)
+	
+confl <- predict(model1, newdata = new_df, interval = "confidence") %>% 
+	as.data.frame() %>% 
+	bind_cols(new_df)
+
+head(pred_df)
+head(predl)
+head(confl)
+
+ggplot() +
+	geom_ribbon(aes(x = bw, ymin = lwr, ymax = upr, fill = "Prediction interval"), predl, alpha = 0.5) +
+	geom_ribbon(aes(x = bw, ymin = lwr, ymax = upr, fill = "Confidence interval"), confl, alpha = 0.5) +
+	geom_line(aes(x = bw, y = estimate), pred_df) +
+	geom_point(aes(x = bw, y = rmr), rmr) +
+	labs(x = "Body weight", y = "Resting metabolic rate (observed values as points)")
+```
+
+### 4. 
+```{r}
+predict(model1, newdata = data.frame(bw=80), interval = "prediction")
+
+250/157.9
+
+pnorm(250/157.9)
+```
+
+### 5. Diagnostic plots
+There are 4 assumptions of (basic) linear models that you should ascertain are fulfilled:
+- Independence between observations
+- Linearity
+- Variance homogeneity (constant variance around the line, independent of height)
+- Residuals are Normally distributed (there is *no* assumption that the data themselves must be Normal!)
+
+```{r}
+gg_diagnose(model1)
+```
+
+### 6. 
+```{r}
+plot(model1,which=4, cex.lab=1.5)
+
+qplot(x = rmr$bw, y = influence(model1)$coefficients[, 2]) +
+	labs(x = "Body weight", y = "Influence on slope")
+```
+
+```{r}
+rmr2 <- rmr %>% 
+	filter(rmr < 2000)
+
+model2 <- lm(rmr ~ bw, data = rmr2)
+summary(model2)
+pretty_estimates(model2)
+```

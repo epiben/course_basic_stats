@@ -63,7 +63,7 @@ epitab(astma, method = "oddsratio", rev = "both")
 epitab(astma, method = "riskratio", rev = "both")
 ```
 
-Note that odds ratio computed by `epitab` is different from that returned by Fisher test. This is due to `epitab`'s default settings. You can get the same estimate by setting the `oddsratio` argument (note that when you explicate how to compute the oddsratio with the argument, you don't need to also specify the `method`):
+Note that odds ratio computed by `epitab` is different from that returned by Fisher test. This is due to `epitab`'s default settings ("wald"). You can get the same estimate by setting the `oddsratio` argument (note that when you explicate how to compute the oddsratio with the argument, you don't need to also specify the `method`):
 ```{r}
 epitab(astma, rev = "both", oddsratio = "fisher")
 ```
