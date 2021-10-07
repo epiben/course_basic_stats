@@ -10,6 +10,7 @@ Materials for the PhD course "Basic statistics for health research" at Universit
 | 2 | T test and linear regression | [ [Rmarkdown](E21/notebook_week_2__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epiben/course_basic_stats/blob/master/E21/notebook_week_2__ex_1.html) \] | \[coming\] | \[coming\] |
 | 3 | Categorical data and tables | \[coming\] | \[coming\] | \[coming\] |
 | 4 | Linear regression (ANCOVA) and log-transform | \[coming\] | \[coming\] | \[coming\] |
+| 5 | ANOVA and log-transformation | [Rmarkdown](E21/notebook_week_5__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epiben/course_basic_stats/blob/master/E21/notebook_week_5__ex_1.html) \] | \[coming\] | \[coming\] |
 
 ### E21 - R intermediate track
 
