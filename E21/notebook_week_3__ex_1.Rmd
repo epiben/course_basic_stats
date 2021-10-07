@@ -1,0 +1,73 @@
+---
+title: "Basic statistics for health research - week 3, ex. 1"
+author: "Benjamin Skov Kaas-Hansen"
+date: "23/9/2021"
+output: 
+  html_document: 
+    code_folding: show
+    df_print: tibble
+    highlight: haddock
+    theme: paper
+    toc: yes
+---
+
+### Setup and loading packages
+
+```{r setup, warning=FALSE, message=FALSE}
+library(dplyr) # to get the pipe (%>%)
+library(descr)
+library(epitools)
+```
+
+### 1. Write up the contingency table
+```{r}
+astma <- matrix(c(20, 2, 47, 71), nrow = 2, 
+				dimnames = list(arm = c("prednisolone", "placebo"), 
+								outcome = c("discharged", "hospitalised")))
+astma
+```
+
+### 2. + 3. Compute $\chi^2$ test statistic
+The `CrossTable` function from `descr` is amazing for analysing contingency tables because you get everything with one line of code (and it's even pretty). The box titled "Cell Contents" tells you what in each of the rows within each cell. The second row shows the expected counts and because they're all >5, the $\chi^2$ test statistic is appropriate.
+
+```{r}
+CrossTable(astma, expected = TRUE, prop.chisq = FALSE, chisq = TRUE, fisher = TRUE, format = "SPSS")
+```
+
+### 4. Comment on CI of discharge probability in placebo group
+The article gives a 95% CI of —1% to 6% which of course is meaningless. This is because the authors based CI on the normality assumption, which is meaningless with counts as these cannot be negative. A better way is to base the CI on the binomial distribution:
+```{r}
+binom.test(2, 73) # 2 were discharged out of 73 patients in the placebo group
+binom.test(20, 67) # 20 were discharged out of 67 patients in the placebo group
+```
+
+An alternative is the Jeffrey interval (which is a bit narrower):
+```{r}
+qbeta(c(0.025, 0.975), 0.5 + 2, 0.5 + 73)
+```
+
+### 5. Compute estimates with 95% CI
+
+#### Differences in discharge probability
+```{r}
+res <- prop.test(astma)
+c(res$estimate[1] - res$estimate[2], res$conf.int) %>% 
+	setNames(c("estimate", "ci_95_lo", "ci_95_hi"))
+```
+
+#### Estimates of relative effects
+We use the `rev` argument to tell the function that we want to use placebo as the control group and hospitalised as the reference outcome (so discharge is the desired outcome). We could also just have defined our contingency table correctly from the beginning...
+
+```{r}
+epitab(astma)
+epitab(astma, method = "oddsratio", rev = "both")
+epitab(astma, method = "riskratio", rev = "both")
+```
+
+Note that odds ratio computed by `epitab` is different from that returned by Fisher test. This is due to `epitab`'s default settings. You can get the same estimate by setting the `oddsratio` argument (note that when you explicate how to compute the oddsratio with the argument, you don't need to also specify the `method`):
+```{r}
+epitab(astma, rev = "both", oddsratio = "fisher")
+```
+
+### 6. Conclusion
+No coding needed, see the "official" answers to exercise.
