@@ -12,6 +12,7 @@ Materials for the PhD course "Basic statistics for health research" at Universit
 | 4 | Linear regression (ANCOVA) | [ [Rmarkdown](E21/notebook_week_4__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epiben/course_basic_stats/blob/master/E21/notebook_week_4__ex_1.html) \] | NA\* | NA\* |
 | 5 | ANOVA and log-transformation | [ [Rmarkdown](E21/notebook_week_5__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epiben/course_basic_stats/blob/master/E21/notebook_week_5__ex_1.html) \] | NA\* | — |
 | 6 | Multiple regression | [ [Rmarkdown](E21/notebook_week_6__ex_1-2.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epiben/course_basic_stats/blob/master/E21/notebook_week_6__ex_1-2.html) \] | With ex. 1 | — |
+| 7 | Interactions | [ [Rmarkdown](E21/notebook_week_7__ex_1.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epiben/course_basic_stats/blob/master/E21/notebook_week_7__ex_1.html) \] | [ [Rmarkdown](E21/notebook_week_7__ex_2.Rmd) \| [HTML](https://htmlpreview.github.io/?https://github.com/epiben/course_basic_stats/blob/master/E21/notebook_week_7__ex_2.html) \] | — |
 
 ### E21 - R intermediate track
 
